@@ -4,3 +4,6 @@
 
 # Add below lines to exclude VS Code settings and caches
 .vscode/
+
+# Add below lines to exclude IDEA settings and caches
+.idea/
