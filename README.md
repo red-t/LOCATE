@@ -77,7 +77,7 @@ cd for_SMS
 python setup.py build_ext -i
 
 # You can remove useless temporary files after compiling
-rm -r build && rm TEMP3/*c
+rm -r build && rm LOCATE/*c
 ```
 
 ### 2.3 Download models
@@ -101,9 +101,9 @@ Now all the models are placed in the following paths:
 ## 3. Usage
 
 ```shell
-python TEMP3.py -b BAM -r REPEAT.bed -g GAP.bed -B BlackList.bed -T TE.fa --germ GERM_MODEL --soma SOMA_MODEL -p NUM_PROCESS -t NUM_THREAD
+python LOCATE.py -b BAM -r REPEAT.bed -g GAP.bed -B BlackList.bed -T TE.fa --germ GERM_MODEL --soma SOMA_MODEL -p NUM_PROCESS -t NUM_THREAD
 
-usage: TEMP3.py [-h] -b GENOMEBAMFN [-r REPEATFN] [-g GAPFN] -C CLASSFN -T TEFN -R REFFN -H HIGHFREQMODEL -L LOWFREQMODEL [-B BLACKLISTFN] [-e MINEDGE] [-n NODELEN] [-o OUTPATH] [-p NUMPROCESS] [-t NUMTHREAD] [-l MINSEGLEN] [-d MAXDISTANCE] [-O MINOVERHANG]
+usage: LOCATE.py [-h] -b GENOMEBAMFN [-r REPEATFN] [-g GAPFN] -C CLASSFN -T TEFN -R REFFN -H HIGHFREQMODEL -L LOWFREQMODEL [-B BLACKLISTFN] [-e MINEDGE] [-n NODELEN] [-o OUTPATH] [-p NUMPROCESS] [-t NUMTHREAD] [-l MINSEGLEN] [-d MAXDISTANCE] [-O MINOVERHANG]
 
 options:
   -h, --help            show this help message and exit
@@ -182,5 +182,5 @@ Column  Value               Description
 16      insSeq              annotated insertion sequence, from the assembled result
 17      upSeq               upstream sequence on the left of insSeq, from the assembled result (has the same orientation as reference)
 18      downSeq             downstream sequence on the right of insSeq, from the assembled result (has the same orientation as reference)
-19      flag                bitwise flag (refer to "TEMP3/src/cluster_utils.h#L16-L41")
+19      flag                bitwise flag (refer to "LOCATE/src/cluster_utils.h#L16-L41")
 ```

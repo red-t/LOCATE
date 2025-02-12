@@ -2,7 +2,7 @@
 import os
 import argparse
 import shutil
-from TEMP3.ParallelModule import runInParallel
+from LOCATE.ParallelModule import runInParallel
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="")

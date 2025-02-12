@@ -3,24 +3,24 @@ from Cython.Build import cythonize
 import numpy as np
 
 ext = [
-    Extension(name = "TEMP3.FileIO",
-              sources = ["TEMP3/FileIO.pyx", "TEMP3/src/AIList.c", "TEMP3/src/seg_utils.c", "TEMP3/src/cluster_utils.c", "TEMP3/src/io_utils.c"],
+    Extension(name = "LOCATE.FileIO",
+              sources = ["LOCATE/FileIO.pyx", "LOCATE/src/AIList.c", "LOCATE/src/seg_utils.c", "LOCATE/src/cluster_utils.c", "LOCATE/src/io_utils.c"],
               libraries = ["hts"]),
 
-    Extension(name = "TEMP3.Cluster",
-              sources = ["TEMP3/Cluster.pyx", "TEMP3/src/AIList.c", "TEMP3/src/seg_utils.c", "TEMP3/src/cluster_utils.c", "TEMP3/src/io_utils.c"],
+    Extension(name = "LOCATE.Cluster",
+              sources = ["LOCATE/Cluster.pyx", "LOCATE/src/AIList.c", "LOCATE/src/seg_utils.c", "LOCATE/src/cluster_utils.c", "LOCATE/src/io_utils.c"],
               libraries = ["hts"]),
     
-    Extension(name = "TEMP3.Assemble",
-              sources = ["TEMP3/Assemble.pyx", "TEMP3/src/AIList.c", "TEMP3/src/seg_utils.c", "TEMP3/src/cluster_utils.c", "TEMP3/src/io_utils.c"],
+    Extension(name = "LOCATE.Assemble",
+              sources = ["LOCATE/Assemble.pyx", "LOCATE/src/AIList.c", "LOCATE/src/seg_utils.c", "LOCATE/src/cluster_utils.c", "LOCATE/src/io_utils.c"],
               libraries = ["hts"]),
     
-    Extension(name = "TEMP3.Annotate",
-              sources = ["TEMP3/Annotate.pyx", "TEMP3/src/AIList.c", "TEMP3/src/seg_utils.c", "TEMP3/src/cluster_utils.c", "TEMP3/src/io_utils.c", "TEMP3/src/anno_utils.c", "TEMP3/src/post_filter.c"],
+    Extension(name = "LOCATE.Annotate",
+              sources = ["LOCATE/Annotate.pyx", "LOCATE/src/AIList.c", "LOCATE/src/seg_utils.c", "LOCATE/src/cluster_utils.c", "LOCATE/src/io_utils.c", "LOCATE/src/anno_utils.c", "LOCATE/src/post_filter.c"],
               libraries = ["hts"]),
     
-    Extension(name = "TEMP3.ParallelModule",
-              sources = ["TEMP3/ParallelModule.pyx", "TEMP3/src/AIList.c", "TEMP3/src/seg_utils.c", "TEMP3/src/cluster_utils.c", "TEMP3/src/io_utils.c", "TEMP3/src/anno_utils.c", "TEMP3/src/post_filter.c", "TEMP3/src/ltr_utils.c"],
+    Extension(name = "LOCATE.ParallelModule",
+              sources = ["LOCATE/ParallelModule.pyx", "LOCATE/src/AIList.c", "LOCATE/src/seg_utils.c", "LOCATE/src/cluster_utils.c", "LOCATE/src/io_utils.c", "LOCATE/src/anno_utils.c", "LOCATE/src/post_filter.c", "LOCATE/src/ltr_utils.c"],
               libraries = ["hts"]),
     ]
 
