@@ -2,7 +2,7 @@
 import os
 import argparse
 import shutil
-from LOCATE.ParallelModule import runInParallel
+from LOCATE.ParallelTaskExecutor import runInParallel
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="")
