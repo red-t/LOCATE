@@ -37,7 +37,6 @@ typedef struct PolyA
     int isA;
     int seqLen;
     int existPolyT;
-    int existPolyA;
 } PolyA;
 
 
