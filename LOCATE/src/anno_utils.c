@@ -14,6 +14,8 @@ PolyA initPolyA(int idx)
     polyA.leftAnnoStart = INT_MAX;
     polyA.rightAnnoEnd = 0;
     polyA.idx = idx;
+    polyA.existPolyT = 0;
+    polyA.existPolyA = 0;
     return polyA;
 }
 
@@ -202,8 +204,14 @@ int setPolyA(char *flankSeq, Annotation *annoArr, Cluster *clt, int numAnno, Pol
     if (numAnno - numOrigin == 0)
         return numAnno;
 
-    polyA->rightAnnoEnd = polyA->isA ? annoArr[numAnno-1].queryEnd : polyA->rightAnnoEnd;
-    polyA->leftAnnoStart = polyA->isA ? polyA->leftAnnoStart : annoArr[numAnno-1].queryStart;
+    if (polyA->isA) {
+        polyA->existPolyA = 1;
+        polyA->rightAnnoEnd = annoArr[numAnno - 1].queryEnd;
+    } else {
+        polyA->existPolyT = 1;
+        polyA->leftAnnoStart = annoArr[numAnno - 1].queryStart;
+    }
+
     return numAnno;
 }
 
@@ -215,12 +223,14 @@ void addPolyA(Annotation *annoArr, int numAnno, Cluster *clt, PolyA *polyA, int 
         annoArr[numAnno].queryEnd = position + polyA->rightAnnoEnd + 1;
         annoArr[numAnno].strand = 0;
         annoArr[numAnno].tid = -1;
+        annoArr[numAnno].extra = 0;
     }
     else {
         annoArr[numAnno].queryStart = position;
         annoArr[numAnno].queryEnd = position + length;
         annoArr[numAnno].strand = 1;
         annoArr[numAnno].tid = -2;
+        annoArr[numAnno].extra = 0;
     }
     annoArr[numAnno].idx = polyA->idx;
     annoArr[numAnno].cltTid = clt->tid;
@@ -238,10 +248,28 @@ void outputTsdSeq(Cluster *clt, PolyA *polyA, Annotation *annoArr, int numAnno)
     faidx_t *assmFa = fai_load((const char *)assmFn);
     hts_pos_t seqLen;
 
+    // Adjust polyA->leftAnnoStart, when polyT is found
+    // Adjust polyA->rightAnnoEnd, when polyA is found
+    if (polyA->existPolyT)
+        polyA->leftAnnoStart += 10;
+    if (polyA->existPolyA)
+        polyA->rightAnnoEnd -= 10;
+
+    //                       polyA->leftAnnoStart
+    //                                |          polyA->rightAnnoEnd
+    //                                |            |
+    // Ins-seq                      =================
+    //
+    //                         clt->leftMost     clt->rightMost
+    //                              |                 |
+    // Assembly     --------------- ================= ---------------
+    //                    |           |            |             |
+    //                 leftStart   leftEnd     rightStart     rightEnd
     int leftStart = clt->leftMost - 100;
     int leftEnd = clt->leftMost + polyA->leftAnnoStart;
     int rightStart = clt->rightMost - (clt->insLen - polyA->rightAnnoEnd);
     int rightEnd = clt->rightMost + 100;
+    
     char *leftSeq = faidx_fetch_seq64(assmFa, faidx_iseq(assmFa, clt->tid1), leftStart, leftEnd-1, &seqLen);
     char *rightSeq = faidx_fetch_seq64(assmFa, faidx_iseq(assmFa, clt->tid2), rightStart, rightEnd-1, &seqLen);
 
@@ -337,6 +365,18 @@ void annoTsd(Cluster *clt, Annotation *annoArr, int numAnno)
     clt->leftMost -= leftDelta;
     clt->rightMost += rightDelta;
     clt->insLen += leftDelta + rightDelta;
+
+    // queryEnd of right-most polyA maye be larger than insLen
+    if (annoArr[numAnno-1].tid == -1 && annoArr[numAnno-1].queryEnd > clt->insLen) {
+        annoArr[numAnno-1].extra = annoArr[numAnno-1].queryEnd - clt->insLen;
+        annoArr[numAnno-1].queryEnd = clt->insLen;
+    }
+
+    // queryStart of left-most polyT maye be lower than 0
+    if (annoArr[numAnno-1].tid == -2 && annoArr[numAnno-1].queryStart < 0) {
+        annoArr[numAnno-1].extra = -annoArr[numAnno-1].queryStart;
+        annoArr[numAnno-1].queryStart = 0;
+    }
 
     if (bam != NULL) {bam_destroy1(bam); bam=NULL;}
     if (inputBam != NULL) {sam_close(inputBam); inputBam=NULL;}
@@ -654,14 +694,18 @@ void outputAnno(Annotation *annoArr, int numAnno, int startIdx, const char *teFn
 void formatSingleAnno(Annotation anno, char *queryTmp, char *refTmp, faidx_t *teFa, int *teTable, int *strandFlag)
 {
     char strand = isRevAnno(anno) ? '-' : '+';
-    sprintf(queryTmp, "%c:%d-%d,", strand, anno.queryStart, anno.queryEnd);
+    if (anno.tid == -1 && anno.extra > 0)
+        sprintf(queryTmp, "%c:%d-%d(%d),", strand, anno.queryStart, anno.queryEnd, anno.extra);
+    else if (anno.tid == -2 && anno.extra > 0)
+        sprintf(queryTmp, "%c:(%d)%d-%d,", strand, anno.extra, anno.queryStart, anno.queryEnd);
+    else
+        sprintf(queryTmp, "%c:%d-%d,", strand, anno.queryStart, anno.queryEnd);
 
     if (anno.tid == -1)
         sprintf(refTmp, "PolyA:%d-%d,", anno.refStart, anno.refEnd);
     else if (anno.tid == -2)
         sprintf(refTmp, "PolyT:%d-%d,", anno.refStart, anno.refEnd);
-    else
-    {
+    else {
         sprintf(refTmp, "%s:%d-%d,", faidx_iseq(teFa, anno.tid), anno.refStart, anno.refEnd);
         teTable[anno.tid] = 1;
         *strandFlag += isRevAnno(anno) ? -1 : 1;

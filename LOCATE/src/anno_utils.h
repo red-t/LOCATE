@@ -21,6 +21,7 @@ typedef struct Annotation
     int         refStart;
     int         refEnd;
     uint32_t    flag;
+    int         extra;
 } __attribute__((packed)) Annotation;
 
 /// @brief Data container for polyA
@@ -35,6 +36,8 @@ typedef struct PolyA
     int rightIdx;
     int isA;
     int seqLen;
+    int existPolyT;
+    int existPolyA;
 } PolyA;
 
 

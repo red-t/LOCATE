@@ -16,6 +16,7 @@ AnnoDt = np.dtype([
     ('refStart',    np.int32),
     ('refEnd',      np.int32),
     ('flag',        np.uint32),
+    ('extra',       np.int32),
 ])
 
 

@@ -21,6 +21,7 @@ cdef extern from "src/anno_utils.h" nogil:
         int         refStart
         int         refEnd
         uint32_t    flag
+        int         extra
     
     ###################################
     ### Annotate Insertion sequence ###
