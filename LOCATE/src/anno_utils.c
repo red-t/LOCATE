@@ -251,9 +251,9 @@ void outputTsdSeq(Cluster *clt, PolyA *polyA, Annotation *annoArr, int numAnno)
     // Adjust polyA->leftAnnoStart, when polyT is found
     // Adjust polyA->rightAnnoEnd, when polyA is found
     if (polyA->existPolyT)
-        polyA->leftAnnoStart += 10;
+        polyA->leftAnnoStart += 5;
     if (polyA->existPolyA)
-        polyA->rightAnnoEnd -= 10;
+        polyA->rightAnnoEnd -= 5;
 
     //                       polyA->leftAnnoStart
     //                                |          polyA->rightAnnoEnd
