@@ -2,7 +2,7 @@
 import os
 import argparse
 import shutil
-from LOCATE.ParallelTaskExecutor import runInParallel
+from .ParallelTaskExecutor import runInParallel
 
 def parseArgs():
     parser = argparse.ArgumentParser(description="")
@@ -42,9 +42,9 @@ def parseArgs():
                                     help='Min overhang length, reads with genomic-mapping-length < overhang will be ignored')
     args = parser.parse_args()
     return args
+    
 
-
-if __name__ == '__main__':
+def main():
     # 1. Parse command args
     cmdArgs = parseArgs()
     

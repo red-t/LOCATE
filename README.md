@@ -67,17 +67,15 @@ pip install cython==3.0.6
 ### 2.1 Clone LOCATE repository
 
 ```shell
-git clone git@github.com:red-t/for_SMS.git
+git clone git@github.com:red-t/LOCATE.git
 ```
 
 ### 2.2 Compile
 
 ```shell
-cd for_SMS
-python setup.py build_ext -i
-
-# You can remove useless temporary files after compiling
-rm -r build && rm LOCATE/*c
+cd LOCATE
+make
+make clean
 ```
 
 ### 2.3 Download models
