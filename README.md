@@ -40,7 +40,7 @@ make clean
 To call transposon insertions from long read alignments (PacBio / ONT), you can use:
 
 ```shell
-locate -b sorted.bam -r sorted_rmsk.bed -r sorted_gap.bed -C transposon.class -T transposon.fa -R reference.fa -H highfreq_model_dir -L lowfreq_model_dir -o output_dir
+locate -b sorted.bam -r sorted_rmsk.bed -g sorted_gap.bed -C transposon.class -T transposon.fa -R reference.fa -H highfreq_model_dir -L lowfreq_model_dir -o output_dir
 ```
 
 **Note:**
