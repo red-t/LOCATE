@@ -40,11 +40,11 @@ void addInterval(AiList *ail, int start, int end, int repTid)
     return;
 }
 
-void readBED(AiList *ail, const char* bedFn, const char* targetChrom)
+void readBED(AiList *ail, const char* bed_fn, const char* targetChrom)
 {
-    samFile *teBam = sam_open("tmp_build/tmp.bam", "rb");
-    sam_hdr_t *header = sam_hdr_read(teBam);
-    FILE *fileHandle = fopen(bedFn, "r");
+    samFile *te_bam = sam_open("tmp_build/tmp.bam", "rb");
+    sam_hdr_t *header = sam_hdr_read(te_bam);
+    FILE *fileHandle = fopen(bed_fn, "r");
 
     char buffer[1024];
     char *chrom, *start, *end, *name;
@@ -66,7 +66,7 @@ void readBED(AiList *ail, const char* bedFn, const char* targetChrom)
         addInterval(ail, atol(start), atol(end), sam_hdr_name2tid(header, name));
 	}
 
-    if (teBam != NULL) {sam_close(teBam); teBam=NULL;}
+    if (te_bam != NULL) {sam_close(te_bam); te_bam=NULL;}
     if (header != NULL) {sam_hdr_destroy(header); header=NULL;}
     fclose(fileHandle);
 }
@@ -137,28 +137,28 @@ void constructAiList(AiList *ail, int minCoverageLen)
 /********************
  *** AiList Query ***
  ********************/
-#define isOverlap1(queryStart, queryEnd, interval) ((interval)->start < (queryEnd) && (interval)->end > (queryStart))
-#define isOverlap2(queryStart, interval) ((interval)->end > (queryStart))
+#define isOverlap1(query_start, query_end, interval) ((interval)->start < (query_end) && (interval)->end > (query_start))
+#define isOverlap2(query_start, interval) ((interval)->end > (query_start))
 
-int binarySearch(Interval *intervalList, int startIndex, int endIndex, int queryEnd)
+int binarySearch(Interval *intervalList, int startIndex, int endIndex, int query_end)
 {
-    //find targetEnd: index of the rightmost interval satisfying (start < queryEnd)
+    //find targetEnd: index of the rightmost interval satisfying (start < query_end)
     int left = startIndex, right = endIndex-1, middle, targetEnd = -1;
 
-    if(intervalList[right].start < queryEnd) return right;
-    else if(intervalList[left].start >= queryEnd) return -1;
+    if(intervalList[right].start < query_end) return right;
+    else if(intervalList[left].start >= query_end) return -1;
 
     while(left < right-1) {
         middle = (left + right) / 2;
-        if(intervalList[middle].start >= queryEnd)
+        if(intervalList[middle].start >= query_end)
             right = middle - 1;
         else
             left = middle;
     }
     
-    if(intervalList[right].start < queryEnd)
+    if(intervalList[right].start < query_end)
         targetEnd = right;
-    else if(intervalList[left].start < queryEnd)
+    else if(intervalList[left].start < query_end)
         targetEnd = left;
         
     return targetEnd; 
@@ -176,8 +176,8 @@ static inline void updateMinDistPoint(Interval *interval, int queryPoint, int *n
 
 void ailistQueryPoint(AiList *ailist, int queryPoint, int flankSize, int *numOverlap, int *minDistance)
 {
-    int queryStart = (queryPoint < flankSize) ? 0 : queryPoint - flankSize;
-    int queryEnd = queryPoint + flankSize;
+    int query_start = (queryPoint < flankSize) ? 0 : queryPoint - flankSize;
+    int query_end = queryPoint + flankSize;
     Contig *contig = &ailist->contigList[0];
     
     // when there're no intervals, skip
@@ -192,17 +192,17 @@ void ailistQueryPoint(AiList *ailist, int queryPoint, int flankSize, int *numOve
         if(contig->lenComp[i] <= 15) {
             for(int j = compStart; j < compEnd; j++) {
                 Interval *interval = &contig->intervalList[j];
-                if(isOverlap1(queryStart, queryEnd, interval))
+                if(isOverlap1(query_start, query_end, interval))
                     updateMinDistPoint(interval, queryPoint, numOverlap, minDistance);
 			}
             continue;
         }
 
-        // j-th interval is the right-most interval with (start < queryEnd)
-        int j = binarySearch(contig->intervalList, compStart, compEnd, queryEnd);
-        while(j >= compStart && contig->maxEndList[j] > queryStart) {
+        // j-th interval is the right-most interval with (start < query_end)
+        int j = binarySearch(contig->intervalList, compStart, compEnd, query_end);
+        while(j >= compStart && contig->maxEndList[j] > query_start) {
             Interval *interval = &contig->intervalList[j];
-            if(isOverlap2(queryStart, interval))
+            if(isOverlap2(query_start, interval))
                 updateMinDistPoint(interval, queryPoint, numOverlap, minDistance);
             j--;
         }
@@ -219,8 +219,8 @@ static inline void updateMinDistInterval(Interval *interval, int start, int end,
 
 int ailistQueryInterval(AiList *ailist, int start, int end, int flankSize, int *numOverlap, int *minDistance)
 {
-    int queryStart = (start < flankSize) ? 0 : start - flankSize;
-    int queryEnd = end + flankSize;
+    int query_start = (start < flankSize) ? 0 : start - flankSize;
+    int query_end = end + flankSize;
     int repTid = -1;
     Contig *contig = &ailist->contigList[0];
 
@@ -236,7 +236,7 @@ int ailistQueryInterval(AiList *ailist, int start, int end, int flankSize, int *
         if(contig->lenComp[i] <= 15) {
             for(int j = compStart; j < compEnd; j++) {
                 Interval *interval = &contig->intervalList[j];
-                if(isOverlap1(queryStart, queryEnd, interval)) {
+                if(isOverlap1(query_start, query_end, interval)) {
                     updateMinDistInterval(interval, start, end, numOverlap, minDistance);
                     repTid = interval->repTid;
                 }
@@ -244,10 +244,10 @@ int ailistQueryInterval(AiList *ailist, int start, int end, int flankSize, int *
             continue;
         }
 
-        int j = binarySearch(contig->intervalList, compStart, compEnd, queryEnd);
-        while(j >= compStart && contig->maxEndList[j] > queryStart) {
+        int j = binarySearch(contig->intervalList, compStart, compEnd, query_end);
+        while(j >= compStart && contig->maxEndList[j] > query_start) {
             Interval *interval = &contig->intervalList[j];
-            if(isOverlap2(queryStart, interval)) {
+            if(isOverlap2(query_start, interval)) {
                 updateMinDistInterval(interval, start, end, numOverlap, minDistance);
                 repTid = interval->repTid;
             }

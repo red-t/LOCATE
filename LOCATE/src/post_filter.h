@@ -4,7 +4,7 @@
 #include "anno_utils.h"
 
 // Perform post-filtering for different TE class
-void postFilter(Cluster *clt);
+void post_filter(Cluster *clt);
 
 // Perform post-filtering for LINE, SINE, RETROPOSON
 void filterLINE(Cluster *clt);

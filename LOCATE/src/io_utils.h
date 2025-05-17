@@ -9,14 +9,14 @@
 /****************************
  *** Segment Sequence IO  ***
  ****************************/
-#define isLowQualClt(clt) (((clt)->isInBlacklist) || ((clt)->probability <= 0.5))
-#define isSomaClt(clt) ((clt)->cltType != 0)
+#define is_lowqual_clt(clt) (((clt)->isInBlacklist) || ((clt)->probability <= 0.5))
+#define is_lowfreq_clt(clt) ((clt)->cltType != 0)
 
 /// @brief select a segment to output from cluster
-int getOuputSegIdx(Cluster *clt, Segment *segArr, Args args);
+int get_ouput_segidx(Cluster *clt, Segment *seg_arr, Args args);
 
 /// @brief get extended region of the segment
-void setTrimRegion(Segment *segment, int *start, int *end, int flankSize);
+void setTrimRegion(Segment *segment, int *start, int *end, int flank_size);
 
 
 /*************************
@@ -33,7 +33,7 @@ typedef struct FlankRegion
 } FlankRegion;
 
 /// @brief output flank-seq and local-seq for all clusters
-void extractRefFlanks(char *refFn, Cluster *cltArr, int startIdx, int endIdx);
+void extract_ref_flankseq(char *ref_fn, Cluster *clt_arr, int start_idx, int end_idx);
 
 /// @brief define flank region on ref-genome
 void setFlankRegion(Cluster *clt, FlankRegion *region);
@@ -66,7 +66,7 @@ typedef struct InsRegion
 } InsRegion;
 
 /// @brief output insertion-seq and tsd-containing-seq from contig
-void extractIns(Cluster *clt);
+void extract_ins_seq(Cluster *clt);
 
 /// @brief define insertion-seq region by Flank-To-Assm alignments
 void setInsRegion(Cluster *clt, InsRegion *region);
@@ -84,7 +84,7 @@ char *getInsSeq(faidx_t *assmFa, Cluster *clt);
 void outputAssmFlank(faidx_t *assmFa, Cluster *clt);
 
 /// @brief refine and ouput insertion-seq for single-flank-mapped cases
-void reExtractIns(Cluster *clt);
+void re_extract_ins_seq(Cluster *clt);
 
 /// @brief re-set insertion-seq region
 void reSetInsRegion(Cluster *clt, faidx_t *assmFa);
@@ -94,7 +94,7 @@ void reSetInsRegion(Cluster *clt, faidx_t *assmFa);
  *******************/
 
 /// @brief Output formated cluster records
-void outputClt(Cluster *cltArr, int startIdx, int endIdx, const char *refFn, const char *teFn);
+void output_clusters(Cluster *clt_arr, int start_idx, int end_idx, const char *ref_fn, const char *te_fn);
 
 /// @brief Fetch TSD sequence from reference genome
 char *fetchTsdSeq(faidx_t *refFa, Cluster *clt);

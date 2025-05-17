@@ -125,7 +125,7 @@ cdef extern from "htslib/hts.h" nogil:
         uint64_t curr_off
 
     void hts_idx_destroy(hts_idx_t *idx)
-    int hts_itr_next(BGZF *fp, hts_itr_t *iter, void *r, void *data)
+    int hts_itr_next(BGZF *fp, hts_itr_t *hts_iter, void *r, void *data)
 
 
 ####################
@@ -261,7 +261,7 @@ cdef extern from "htslib/sam.h" nogil:
     #*************************
 
     hts_idx_t *sam_index_load2(htsFile *fp, const char *fn, const char *fnidx)
-    void sam_itr_destroy(hts_itr_t *iter)
+    void sam_itr_destroy(hts_itr_t *hts_iter)
     hts_itr_t *sam_itr_queryi(const hts_idx_t *idx, int tid, int beg, int end)
 
     #***************

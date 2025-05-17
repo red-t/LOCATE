@@ -55,7 +55,7 @@ typedef struct {
  ***************************/
 AiList *initAiList(void);
 void destroyAiList(AiList *ail);
-void readBED(AiList *ail, const char *bedFn, const char *targetChrom);
+void readBED(AiList *ail, const char *bed_fn, const char *targetChrom);
 void constructAiList(AiList *ail, int minCoverageLen);
 
 

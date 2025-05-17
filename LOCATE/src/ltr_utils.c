@@ -2,43 +2,43 @@
 
 
 /// @brief Define and return LTR sizes for all LTR-class TE
-void defineLTR(const char *teFn, const char *teClassFn)
+void define_ltr(const char *te_fn, const char *teClassFn)
 {
-    faidx_t *teFa = fai_load(teFn);
+    faidx_t *teFa = fai_load(te_fn);
     int numTe = faidx_nseq(teFa);
-    int *ltrArr = malloc(numTe * sizeof(int));
-    int *classArr = getClassArr(numTe, teClassFn);
+    int *ltr_arr = malloc(numTe * sizeof(int));
+    int *class_arr = get_class_arr(numTe, teClassFn);
 
     for (int i = 0; i < numTe; i++)
     {
-        if (classArr[i] != 1) {
-            ltrArr[i] = 0;
+        if (class_arr[i] != 1) {
+            ltr_arr[i] = 0;
             continue;
         }
 
         outputSeq(i, teFa);
         mapEachOther(i);
-        ltrArr[i] = getLtrLen(i);
+        ltr_arr[i] = getLtrLen(i);
     }
 
-    char outFn[100] = {'\0'};
-    sprintf(outFn, "tmp_anno/ltrSize.txt");
-    FILE *outFp = fopen(outFn, "w");
+    char output_fn[100] = {'\0'};
+    sprintf(output_fn, "tmp_anno/ltrSize.txt");
+    FILE *outFp = fopen(output_fn, "w");
     for (int i = 0; i < numTe; i++) {
-        fprintf(outFp, "%d\n", ltrArr[i]);
+        fprintf(outFp, "%d\n", ltr_arr[i]);
     }
     fclose(outFp);
 
     if (teFa != NULL) {fai_destroy(teFa); teFa = NULL;}
-    if (ltrArr != NULL) {free(ltrArr); ltrArr = NULL;}
-    if (classArr != NULL) {free(classArr); classArr = NULL;}
+    if (ltr_arr != NULL) {free(ltr_arr); ltr_arr = NULL;}
+    if (class_arr != NULL) {free(class_arr); class_arr = NULL;}
 }
 
 /// @brief Load TE class information
-int *getClassArr(int numTe, const char *teClassFn)
+int *get_class_arr(int numTe, const char *teClassFn)
 {
     FILE *classFile = fopen(teClassFn, "r");
-    int *classArr = malloc(numTe * sizeof(int));
+    int *class_arr = malloc(numTe * sizeof(int));
 
     int count = 0;
     char buffer[1024], *name, *class;
@@ -54,15 +54,15 @@ int *getClassArr(int numTe, const char *teClassFn)
         class[length - 1] = (class[length - 1] == '\n') ? '\0' : class[length - 1];
         
         if (strcmp(class, "LTR") == 0)
-            classArr[count] = 1;
+            class_arr[count] = 1;
         else
-            classArr[count] = 0;
+            class_arr[count] = 0;
 
         count++;
     }
 
     fclose(classFile);
-    return classArr;
+    return class_arr;
 }
 
 /// @brief Output left-/right- half of LTR-class TE separately
@@ -97,19 +97,19 @@ void mapEachOther(int tid)
 /// @brief Compute LTR region length
 int getLtrLen(int tid)
 {
-    char inputFn[100] = {'\0'};
-    sprintf(inputFn, "tmp_anno/%d_rightToLeft.bam", tid);
-    htsFile *inputBam = sam_open(inputFn, "rb");
-    sam_hdr_t *header = sam_hdr_read(inputBam);
+    char input_fn[100] = {'\0'};
+    sprintf(input_fn, "tmp_anno/%d_rightToLeft.bam", tid);
+    htsFile *input_bam = sam_open(input_fn, "rb");
+    sam_hdr_t *header = sam_hdr_read(input_bam);
     bam1_t *bam = bam_init1();
 
     int ltrLen = 0;
     while (1)
     {
-        int retValue = bam_read1(inputBam->fp.bgzf, bam);
-        if (retValue < 0)
+        int return_value = bam_read1(input_bam->fp.bgzf, bam);
+        if (return_value < 0)
             break;
-        if (bamIsInvalid(bam) || bam_is_rev(bam))
+        if (bam_is_invalid(bam) || bam_is_rev(bam))
             continue;
         if (bam->core.pos > 10)
             continue;
@@ -126,12 +126,7 @@ int getLtrLen(int tid)
         printf("Warning: failed to define LTR, TE tid = %d\n", tid);
 
     if (bam != NULL) {bam_destroy1(bam); bam=NULL;}
-    if (inputBam != NULL) {sam_close(inputBam); inputBam=NULL;}
+    if (input_bam != NULL) {sam_close(input_bam); input_bam=NULL;}
     if (header != NULL) {sam_hdr_destroy(header); header=NULL;}
     return ltrLen;
-}
-
-/// @brief Test
-int main() {
-    defineLTR("/home/zhongrenhu/test/data/dm3.transposon_for_simulaTE.fa", "/home/zhongrenhu/test/data/dm3.repeat.class");
 }

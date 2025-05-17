@@ -5,17 +5,17 @@
  **********************/
 
 /// @brief Update cluster values by segments features and background info
-void updateCluster(Cluster *cltArr, Segment *segArr, Args args)
+void update_cluster(Cluster *clt_arr, Segment *seg_arr, Args args)
 {
-    Cluster *clt = &cltArr[0];
-    setTeAlignedFrac(clt, segArr, args);
+    Cluster *clt = &clt_arr[0];
+    setTeAlignedFrac(clt, seg_arr, args);
     if (clt->numSeg <= 2)
-        setCltType(clt, segArr, args);
+        setCltType(clt, seg_arr, args);
         
     if (!isValidCandidate(clt))
         return;
 
-    updateBySegArr(clt, segArr, args);
+    updateBySegArr(clt, seg_arr, args);
     setCltLocationType(clt, args);
     divideByNumSeg(clt);
     divideByBgInfo(clt, args);
@@ -28,13 +28,13 @@ void updateCluster(Cluster *cltArr, Segment *segArr, Args args)
  ************************/
 
 /// @brief Compute TE-aligned-fraction of a cluster
-void setTeAlignedFrac(Cluster *clt, Segment *segArr, Args args)
+void setTeAlignedFrac(Cluster *clt, Segment *seg_arr, Args args)
 {
     float numTeAlignedSeg = 0;
-    for (int i = clt->startIdx; i < clt->endIdx; i++) {
-        if (segArr[i].overhang < args.minOverhang)
+    for (int i = clt->start_idx; i < clt->end_idx; i++) {
+        if (seg_arr[i].overhang < args.overhang)
             continue;
-        if (segArr[i].numTeAlignment > 0)
+        if (seg_arr[i].num_te_aln > 0)
             numTeAlignedSeg += 1;
         clt->numSeg += 1;
     }
@@ -43,7 +43,7 @@ void setTeAlignedFrac(Cluster *clt, Segment *segArr, Args args)
 }
 
 /// @brief Set cluster's cltType, which represent the cluster is germ/soma
-void setCltType(Cluster *clt, Segment *segArr, Args args)
+void setCltType(Cluster *clt, Segment *seg_arr, Args args)
 {
     if (clt->numSeg == 1) {
         clt->cltType = 1;
@@ -51,21 +51,21 @@ void setCltType(Cluster *clt, Segment *segArr, Args args)
     }
 
     int isFirst = 1;
-    for (int i = clt->startIdx; i < clt->endIdx; i++) {
-        Segment *segment = &segArr[i];
-        if (overhangIsShort(segment, args.minOverhang))
+    for (int i = clt->start_idx; i < clt->end_idx; i++) {
+        Segment *segment = &seg_arr[i];
+        if (overhang_too_short(segment, args.overhang))
             continue;
         if (isFirst) {
-            bgzf_seek(args.genomeBam->fp.bgzf, segment->fileOffset, SEEK_SET);
-            bam_read1(args.genomeBam->fp.bgzf, args.firstBamRecord);
+            bgzf_seek(args.genome_bam->fp.bgzf, segment->file_offset, SEEK_SET);
+            bam_read1(args.genome_bam->fp.bgzf, args.first_bam_record);
             isFirst = 0;
             continue;
         }
-        bgzf_seek(args.genomeBam->fp.bgzf, segment->fileOffset, SEEK_SET);
-        bam_read1(args.genomeBam->fp.bgzf, args.secondBamRecord);
+        bgzf_seek(args.genome_bam->fp.bgzf, segment->file_offset, SEEK_SET);
+        bam_read1(args.genome_bam->fp.bgzf, args.second_bam_record);
     }
     
-    if (nameIsSame(args.firstBamRecord, args.secondBamRecord))
+    if (nameIsSame(args.first_bam_record, args.second_bam_record))
         clt->cltType = 2;
 }
 
@@ -75,14 +75,14 @@ void setCltType(Cluster *clt, Segment *segArr, Args args)
  **********************************/
 
 /// @brief Update cluster values by all segments
-void updateBySegArr(Cluster *clt, Segment *segArr, Args args)
+void updateBySegArr(Cluster *clt, Segment *seg_arr, Args args)
 {
     int numLeft = 0, numMiddle = 0, numRight = 0;
 
-    for (int i = clt->startIdx; i < clt->endIdx; i++)
+    for (int i = clt->start_idx; i < clt->end_idx; i++)
     {
-        Segment *segment = &segArr[i];
-        if (overhangIsShort(segment, args.minOverhang))
+        Segment *segment = &seg_arr[i];
+        if (overhang_too_short(segment, args.overhang))
             continue;
         countValuesFromSeg(clt, args, segment, &numLeft, &numMiddle, &numRight);
     }
@@ -96,28 +96,28 @@ void updateBySegArr(Cluster *clt, Segment *segArr, Args args)
 void countValuesFromSeg(Cluster *clt, Args args, Segment *segment, int *numLeft, int *numMiddle, int *numRight)
 {
     countDifferentSeg(numLeft, numMiddle, numRight, segment);
-    clt->numSegType |= segment->segType;
-    clt->meanMapQual += segment->mapQual;
+    clt->numSegType |= segment->seg_type;
+    clt->meanMapQual += segment->map_qual;
     countAlnFracs(clt, segment);
 
-    if (segment->mapQual < 5)
+    if (segment->map_qual < 5)
         clt->lowMapQualFrac += 1;
     if (isDualClip(segment))
         clt->dualClipFrac += 1;
     if (noTeAlignment(segment)) {
-        clt->meanDivergence += args.bgDiv;
+        clt->meanDivergence += args.bg_div;
         return;
     }
 
-    clt->meanAlnScore += segment->sumAlnScore / segment->numTeAlignment;
-    clt->meanQueryMapFrac += (float)segment->sumQueryMapLen / (segment->queryEnd - segment->queryStart);
-    clt->meanDivergence += segment->sumDivergence / segment->numTeAlignment;
+    clt->meanAlnScore += segment->sum_aln_score / segment->num_te_aln;
+    clt->meanQueryMapFrac += (float)segment->sum_query_maplen / (segment->query_end - segment->query_start);
+    clt->meanDivergence += segment->sum_divergence / segment->num_te_aln;
 }
 
 /// @brief Count the number of segments with different type
 void countDifferentSeg(int *numLeft, int *numMiddle, int *numRight, Segment *segment)
 {
-    switch (segment->segType)
+    switch (segment->seg_type)
     {
     case LEFT_CLIP:
         *numLeft += 1; break;
@@ -130,10 +130,10 @@ void countDifferentSeg(int *numLeft, int *numMiddle, int *numRight, Segment *seg
     }
 }
 
-/// @brief Count the number of segments with different alnLocationType
+/// @brief Count the number of segments with different aln_location_type
 void countAlnFracs(Cluster *clt, Segment *segment)
 {
-    switch (segment->alnLocationType)
+    switch (segment->aln_location_type)
     {
     case 1:
         clt->alnFrac1 += 1; break;
@@ -190,8 +190,8 @@ void setNumSegType(Cluster *clt)
 void setCltLocationType(Cluster *clt, Args args)
 {
     int numOverlap = 0, minDistanceToOverlap = INT_MAX, repTid = -1;
-    repTid = ailistQueryInterval(args.gapAiList, clt->refStart, clt->refEnd, 50, &numOverlap, &minDistanceToOverlap);
-    repTid = ailistQueryInterval(args.repeatAiList, clt->refStart, clt->refEnd, 50, &numOverlap, &minDistanceToOverlap);
+    repTid = ailistQueryInterval(args.gap_ailist, clt->ref_start, clt->ref_end, 50, &numOverlap, &minDistanceToOverlap);
+    repTid = ailistQueryInterval(args.repeat_ailist, clt->ref_start, clt->ref_end, 50, &numOverlap, &minDistanceToOverlap);
     clt->repTid = repTid;
 
     if (numOverlap == 0) {
@@ -232,16 +232,16 @@ void divideByNumSeg(Cluster *clt)
 /// @brief Divide cluster values by background info
 void divideByBgInfo(Cluster *clt, Args args)
 {
-    clt->meanDivergence = clt->meanDivergence / args.bgDiv;
-    clt->numSeg = clt->numSeg / args.bgDepth;
+    clt->meanDivergence = clt->meanDivergence / args.bg_div;
+    clt->numSeg = clt->numSeg / args.bg_depth;
 }
 
 /// @brief Set background info of a cluster
 void setBackbgInfo(Cluster *clt, Args args)
 {
-    clt->bgDiv = args.bgDiv;
-    clt->bgDepth = args.bgDepth;
-    clt->bgReadLen = args.bgReadLen;
+    clt->bgDiv = args.bg_div;
+    clt->bgDepth = args.bg_depth;
+    clt->bgReadLen = args.bg_read_len;
 }
 
 
@@ -250,10 +250,10 @@ void setBackbgInfo(Cluster *clt, Args args)
  *****************/
 
 /// @brief Check if the cluster inersect with blacklist
-void intersectBlackList(Cluster *clt, Args args)
+void intersect_black_list(Cluster *clt, Args args)
 {
     int numOverlap = 0, minDistanceToOverlap = 0x7fffffff;
-    ailistQueryInterval(args.blackAiList, clt->refStart, clt->refEnd, 2, &numOverlap, &minDistanceToOverlap);
+    ailistQueryInterval(args.blacklist_ailist, clt->ref_start, clt->ref_end, 2, &numOverlap, &minDistanceToOverlap);
     if (numOverlap > 0)
         clt->isInBlacklist = 1;
 }

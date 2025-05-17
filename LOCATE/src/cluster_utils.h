@@ -73,10 +73,10 @@
 /*! @brief Data container for cluster merged from segments.
  @field  tid                target id of corresponding chromosome
  @field  idx                cluster index in cluster arr (0-based)
- @field  refStart           cluster start on reference genome (0-based)
- @field  refEnd             cluster end on reference genome (0-based)
- @field  startIdx           start index in segment arr (0-based, include)
- @field  endIdx             end index in segment arr (0-based, not-include)
+ @field  ref_start           cluster start on reference genome (0-based)
+ @field  ref_end             cluster end on reference genome (0-based)
+ @field  start_idx           start index in segment arr (0-based, include)
+ @field  end_idx             end index in segment arr (0-based, not-include)
  @field  numSeg             number of segments in the cluster (normalized by bg depth)
  @field  cltType            cluster type
                                 0: germline (multiple support reads)
@@ -91,11 +91,11 @@
  @field  balanceRatio       balance ratio based on number of left- & right-clip segments
  @field  lowMapQualFrac     fraction of segments with low mapQual (<5)
  @field  dualClipFrac       fraction of "dual-clip" alignments
- @field  alnFrac1           fraction of segments with alnLocationType=1
- @field  alnFrac2           fraction of segments with alnLocationType=2
- @field  alnFrac4           fraction of segments with alnLocationType=4
- @field  alnFrac8           fraction of segments with alnLocationType=8
- @field  alnFrac16          fraction of segments with alnLocationType=16
+ @field  alnFrac1           fraction of segments with aln_location_type=1
+ @field  alnFrac2           fraction of segments with aln_location_type=2
+ @field  alnFrac4           fraction of segments with aln_location_type=4
+ @field  alnFrac8           fraction of segments with aln_location_type=8
+ @field  alnFrac16          fraction of segments with aln_location_type=16
  @field  meanMapQual        mean mapQual of cluster
  @field  meanAlnScore       mean per-base alignment score (based on teAlignments)
  @field  meanQueryMapFrac   mean query mapped fraction (based on teAlignments)
@@ -122,10 +122,10 @@ typedef struct Cluster
 {
     int         tid;
     int         idx;
-    int         refStart;
-    int         refEnd;
-    int         startIdx;
-    int         endIdx;
+    int         ref_start;
+    int         ref_end;
+    int         start_idx;
+    int         end_idx;
     float       numSeg;
     uint8_t     cltType;
     uint8_t     locationType;
@@ -165,20 +165,20 @@ typedef struct Cluster
 /// @brief Data container for arguments
 typedef struct Args
 {
-    int         numThread;
+    int         num_thread;
     int         tid;
-    int         minSegLen;
-    int         maxDistance;
-    int         minOverhang;
-    float       bgDiv;
-    float       bgDepth;
-    float       bgReadLen;
-    htsFile     *genomeBam;
-    bam1_t      *firstBamRecord;
-    bam1_t      *secondBamRecord;
-    AiList      *repeatAiList;
-    AiList      *gapAiList;
-    AiList      *blackAiList;
+    int         min_seg_len;
+    int         max_dist;
+    int         overhang;
+    float       bg_div;
+    float       bg_depth;
+    float       bg_read_len;
+    htsFile     *genome_bam;
+    bam1_t      *first_bam_record;
+    bam1_t      *second_bam_record;
+    AiList      *repeat_ailist;
+    AiList      *gap_ailist;
+    AiList      *blacklist_ailist;
 } Args;
 
 
@@ -187,31 +187,31 @@ typedef struct Args
  **********************/
 
 /// @brief Update cluster values by segments features and background info
-void updateCluster(Cluster *cltArr, Segment *segArr, Args args);
+void update_cluster(Cluster *clt_arr, Segment *seg_arr, Args args);
 
 
 /************************
  *** Define Candidate ***
  ************************/
-#define overhangIsShort(segment, minOverhang) ((segment)->overhang < (minOverhang))
+#define overhang_too_short(segment, min_overhang) ((segment)->overhang < (min_overhang))
 #define nameIsSame(record1, record2) (strcmp(bam_get_qname((record1)), bam_get_qname((record2))) == 0)
 #define isValidCandidate(clt) ((clt)->teAlignedFrac >= 0.8)
 
 /// @brief Compute TE-aligned-fraction of a cluster
-void setTeAlignedFrac(Cluster *clt, Segment *segArr, Args args);
+void setTeAlignedFrac(Cluster *clt, Segment *seg_arr, Args args);
 
 /// @brief Set cluster's cltType, which represent the cluster is germ/soma
-void setCltType(Cluster *clt, Segment *segArr, Args args);
+void setCltType(Cluster *clt, Segment *seg_arr, Args args);
 
 
 /**********************************
  *** Update Cluster By Segments ***
  **********************************/
-#define isDualClip(segment) (((segment)->alnType & DUAL_CLIP) == 5)
-#define noTeAlignment(segment) ((segment)->numTeAlignment == 0)
+#define isDualClip(segment) (((segment)->aln_type & DUAL_CLIP) == 5)
+#define noTeAlignment(segment) ((segment)->num_te_aln == 0)
 
 /// @brief Update cluster values by all segments
-void updateBySegArr(Cluster *clt, Segment *segArr, Args args);
+void updateBySegArr(Cluster *clt, Segment *seg_arr, Args args);
 
 /// @brief Update cluster values by single segment
 void countValuesFromSeg(Cluster *clt, Args args, Segment *segment, int *numLeft, int *numMiddle, int *numRight);
@@ -219,7 +219,7 @@ void countValuesFromSeg(Cluster *clt, Args args, Segment *segment, int *numLeft,
 /// @brief Count number of different type segments
 void countDifferentSeg(int *numLeft, int *numMiddle, int *numRight, Segment *segment);
 
-/// @brief Count the number of segments with different alnLocationType
+/// @brief Count the number of segments with different aln_location_type
 void countAlnFracs(Cluster *clt, Segment *segment);
 
 /// @brief Compute entropy based on the number of different type segments
@@ -257,6 +257,6 @@ void setBackbgInfo(Cluster *clt, Args args);
  *****************/
 
 /// @brief Check if the cluster inersect with blacklist
-void intersectBlackList(Cluster *clt, Args args);
+void intersect_black_list(Cluster *clt, Args args);
 
 #endif // CLUSTER_UTILS_H

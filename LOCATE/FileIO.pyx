@@ -1,66 +1,89 @@
 import os
+import logging
 import subprocess
 from collections import Counter
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 ########################
-### Class Definition ###
+### Constants ###
 ########################
-cdef int MAX_POS = (1 << 31) - 1
+cdef int MAX_POSITION = (1 << 31) - 1
+
+########################
+### BamFile Class ###
+########################
 cdef class BamFile:
-    def __cinit__(self, str filePath, str mode, int numThread=1, BamFile template=None):
-        cdef bytes filePathBytes = os.fsencode(filePath)
-        cdef bytes indexPathBytes = os.fsencode(filePath + ".bai")
-        cdef bytes modeBytes = mode.encode()
+    """
+    A class for handling BAM file operations.
+    """
+    def __cinit__(self, str file_path, str mode, int num_thread=1, BamFile template=None):
+        cdef bytes file_path_bytes = os.fsencode(file_path)
+        cdef bytes index_path_bytes = os.fsencode(file_path + ".bai")
+        cdef bytes mode_bytes = mode.encode()
 
-        self.filePath = filePathBytes
-        self.indexFilePath = indexPathBytes
-        self.mode = modeBytes
-        self.numThread = numThread
+        self.file_path = file_path_bytes
+        self.index_file_path = index_path_bytes
+        self.mode = mode_bytes
+        self.num_thread = num_thread
 
-        self.openFile(template)
+        self.open_bam_file(template)
     
-    cdef void openFile(self, BamFile template=None):
-        self.htsFile = self.openHtsFile()
-        if self.htsFile == NULL:
-            raise IOError("could not open BAM file `{}`".format(self.filePath.decode()))
+    cdef void open_bam_file(self, BamFile template=None):
+        """
+        Open a BAM file in the specified mode.
+        """
+        try:
+            self.hts_file = self._open_hts_file()
+            if self.hts_file == NULL:
+                raise IOError(f"Could not open BAM file `{self.file_path.decode()}`")
 
-        if self.mode == b'rb':
-            with nogil:
-                self.header = sam_hdr_read(self.htsFile)
-            if self.header == NULL:
-                raise IOError("file does not have a valid header, is it BAM format?")
-            
-            if os.path.exists(self.indexFilePath.decode()):
+            if self.mode == b'rb':
                 with nogil:
-                    self.index = sam_index_load2(self.htsFile, self.filePath, self.indexFilePath)
-                if not self.index:
-                    raise IOError('unable to open index file `{}`'.format(self.indexFilePath.decode()))
+                    self.header = sam_hdr_read(self.hts_file)
+                if self.header == NULL:
+                    raise IOError("File does not have a valid header, is it BAM format?")
+                
+                if os.path.exists(self.index_file_path.decode()):
+                    with nogil:
+                        self.index = sam_index_load2(self.hts_file, self.file_path, self.index_file_path)
+                    if not self.index:
+                        raise IOError(f"Unable to open index file `{self.index_file_path.decode()}`")
 
-        elif (self.mode == b'wb') or (self.mode == b'wF'):
-            if template:
-                self.header = sam_hdr_dup(template.header)
-            else:
-                raise ValueError("need a template for copying header")
+            elif self.mode in (b'wb', b'wF'):
+                if template:
+                    self.header = sam_hdr_dup(template.header)
+                else:
+                    raise ValueError("Need a template for copying header")
 
-            if self.mode == b'wb':
-                with nogil:
-                    sam_hdr_write(self.htsFile, self.header)
+                if self.mode == b'wb':
+                    with nogil:
+                        sam_hdr_write(self.hts_file, self.header)
+        except Exception as e:
+            logging.error(f"Error opening BAM file: {e}")
+            raise
     
-    cdef htsFile *openHtsFile(self) except? NULL:
-        '''open file in 'rb/wb/wF' mode'''
-        cdef htsFile *htsFile
+    cdef htsFile *_open_hts_file(self) except? NULL:
+        """
+        Open a BAM file in 'rb/wb/wF' mode.
+        """
+        cdef htsFile *hts_file
         with nogil:
-            htsFile = sam_open(self.filePath, self.mode)
-            if htsFile != NULL:
-                hts_set_threads(htsFile, self.numThread)
-            return htsFile
+            hts_file = sam_open(self.file_path, self.mode)
+            if hts_file != NULL:
+                hts_set_threads(hts_file, self.num_thread)
+            return hts_file
     
-    cdef void write(self, bam1_t *bam):
-        cdef int retValue
+    cdef void write(self, bam1_t *bam_record):
+        """
+        Write a BAM record to the file.
+        """
+        cdef int return_value
         with nogil:
-            retValue = sam_write1(self.htsFile, self.header, bam)
-        if retValue < 0:
-            raise IOError("sam_write1 failed with error code {}".format(retValue))
+            return_value = sam_write1(self.hts_file, self.header, bam_record)
+        if return_value < 0:
+            raise IOError(f"sam_write1 failed with error code {return_value}")
     
     def __enter__(self):
         return self
@@ -70,9 +93,12 @@ cdef class BamFile:
         return False
 
     def close(self):
-        if self.htsFile:
-            sam_close(self.htsFile)
-            self.htsFile = NULL
+        """
+        Close the BAM file and release resources.
+        """
+        if self.hts_file:
+            sam_close(self.hts_file)
+            self.hts_file = NULL
         if self.index:
             hts_idx_destroy(self.index)
             self.index = NULL
@@ -81,243 +107,289 @@ cdef class BamFile:
             self.header = NULL
 
     def __dealloc__(self):
-        if self.htsFile:
-            sam_close(self.htsFile)
-            self.htsFile = NULL
-        if self.index:
-            hts_idx_destroy(self.index)
-            self.index = NULL
-        if self.header:
-            sam_hdr_destroy(self.header)
-            self.header = NULL
+        self.close()
 
 
+########################
+### Iterator Class ###
+########################
 cdef class Iterator:
+    """
+    A class for iterating over BAM records.
+    """
     def __cinit__(self):
-        self.bamRcord = bam_init1()
-        if self.bamRcord == NULL:
-            raise MemoryError("could not allocate memory of size {}".format(sizeof(bam1_t)))
+        self.bam_record = bam_init1()
+        if self.bam_record == NULL:
+            raise MemoryError(f"Could not allocate memory of size {sizeof(bam1_t)}")
 
-    def __init__(self, BamFile bamFile, int tid=-1):
-        self.htsFile = bamFile.htsFile
+    def __init__(self, BamFile bam_file, int tid=-1):
+        self.hts_file = bam_file.hts_file
         if tid >= 0:
             with nogil:
-                self.iter = sam_itr_queryi(bamFile.index, tid, 0, MAX_POS)
+                self.hts_iter = sam_itr_queryi(bam_file.index, tid, 0, MAX_POSITION)
     
     def __dealloc__(self):
-        if self.bamRcord:
-            bam_destroy1(self.bamRcord)
-            self.bamRcord = NULL
-        if self.iter:
-            sam_itr_destroy(self.iter)
-            self.iter = NULL
+        if self.bam_record:
+            bam_destroy1(self.bam_record)
+            self.bam_record = NULL
+        if self.hts_iter:
+            sam_itr_destroy(self.hts_iter)
+            self.hts_iter = NULL
     
     def __iter__(self):
         return self
 
-    cdef int cnext1(self):
-        '''cversion of iterator. retValue>=0 if success.'''
-        cdef int retValue
-
+    cdef int next_record_by_tid(self):
+        """
+        Read next alignment record on specified chromosome.
+        """
+        cdef int return_value
         with nogil:
-            if self.iter.curr_off == 0:
-                if self.iter.n_off > 0:
-                    self.offset = self.iter.off[0].u
+            if self.hts_iter.curr_off == 0:
+                if self.hts_iter.n_off > 0:
+                    self.offset = self.hts_iter.off[0].u
                 else:
-                    self.offset = self.iter.curr_off
+                    self.offset = self.hts_iter.curr_off
             else:
-                self.offset = self.iter.curr_off
+                self.offset = self.hts_iter.curr_off
 
-            retValue = hts_itr_next(self.htsFile.fp.bgzf, self.iter, self.bamRcord, self.htsFile)
-
-        return retValue
+            return_value = hts_itr_next(self.hts_file.fp.bgzf, self.hts_iter, self.bam_record, self.hts_file)
+        return return_value
     
-    cdef int cnext2(self):
-        '''directly read a alignment record'''
-        cdef int retValue
-
+    cdef int next_record(self):
+        """
+        Directly read next alignment record.
+        """
+        cdef int return_value
         with nogil:
-            retValue = bam_read1(self.htsFile.fp.bgzf, self.bamRcord)
-        
-        return retValue
+            return_value = bam_read1(self.hts_file.fp.bgzf, self.bam_record)
+        return return_value
 
-    cdef int cnext3(self, int64_t offset):
-        '''read a alignment record with specified offset'''
-        cdef int retValue
-
+    cdef int next_record_by_offset(self, int64_t offset):
+        """
+        Read an alignment record with a specified offset.
+        """
+        cdef int return_value
         with nogil:
-            bgzf_seek(self.htsFile.fp.bgzf, offset, SEEK_SET)
-            retValue = bam_read1(self.htsFile.fp.bgzf, self.bamRcord)
-        
-        return retValue
+            bgzf_seek(self.hts_file.fp.bgzf, offset, SEEK_SET)
+            return_value = bam_read1(self.hts_file.fp.bgzf, self.bam_record)
+        return return_value
 
 
-######################
-### Construct Args ###
-######################
-cdef Args newArgs(int tid, float bgDiv, float bgDepth, float bgReadLen, object cmdArgs):
+########################
+### Utility Functions ###
+########################
+cdef Args new_args(int tid, float bg_div, float bg_depth, float bg_read_len, object cmd_args):
+    """
+    Construct an Args object with the given parameters.
+    """
     cdef Args args
-
     args.tid = tid
-    args.bgDiv = bgDiv
-    args.bgDepth = bgDepth
-    args.bgReadLen = bgReadLen
-    args.numThread = cmdArgs.numThread
-    args.minSegLen = cmdArgs.minSegLen
-    args.maxDistance = cmdArgs.maxDistance
-    args.minOverhang = cmdArgs.minOverhang
+    args.bg_div = bg_div
+    args.bg_depth = bg_depth
+    args.bg_read_len = bg_read_len
+    args.num_thread = cmd_args.num_thread
+    args.min_seg_len = cmd_args.min_seg_len
+    args.max_dist = cmd_args.max_dist
+    args.overhang = cmd_args.overhang
     return args
 
 
-#######################
-### Construc AiList ###
-#######################
-cdef AiList* newAiList(str bedFn, const char *chrom):
-    cdef bytes bedFnBytes = bedFn.encode()
-    cdef AiList *aiList = initAiList()
+cdef AiList* new_ailist(str bed_fn, const char *chrom):
+    """
+    Construct a new AiList object.
+    """
+    cdef bytes bed_fn_bytes = bed_fn.encode()
+    cdef AiList *ai_list = initAiList()
 
-    # Load intervals only if bedFn exists
-    if bedFn:
-        readBED(aiList, bedFnBytes, chrom)
+    if bed_fn:
+        readBED(ai_list, bed_fn_bytes, chrom)
 
-    constructAiList(aiList, 20)
-    return aiList
-
-
-###########################
-### Segment Sequence IO ###
-###########################
-cdef ouputAllSegSeqs(Segment[::1] segView, BamFile genomeBam, Args args):
-    cdef str outputFn = "tmp_build/all_seg_{}.fa".format(args.tid)
-    cdef BamFile outputFa = BamFile(outputFn, "wF", args.numThread, genomeBam)
-    cdef Iterator iterator = Iterator(genomeBam, args.tid)
-    cdef bam1_t *destRecord = bam_init1()
-    cdef int i, retValue
-
-    for i in range(segView.shape[0]):
-        retValue = iterator.cnext3(segView[i].fileOffset)
-        trimSegment(iterator.bamRcord, destRecord, i, segView[i].queryStart, segView[i].queryEnd)
-        outputFa.write(destRecord)
-    
-    bam_destroy1(destRecord); outputFa.close(); del outputFa; del iterator
+    constructAiList(ai_list, 20)
+    return ai_list
 
 
-cdef outputGermCltSeqs(Cluster[::1] cltView, Segment[::1] segView, BamFile genomeBam, Args args):
-    cdef str outputFn
-    cdef BamFile outputFa
-    cdef Iterator iterator = Iterator(genomeBam, args.tid)
-    cdef bam1_t *destRecord = bam_init1()
+########################
+### Output Functions ###
+########################
+cdef ouput_seg_seqs(Segment[::1] seg_view, BamFile genome_bam, Args args):
+    """
+    Output all segments' sequences to a file.
+    """
+    cdef str output_fn = "tmp_build/all_seg_{}.fa".format(args.tid)
+    cdef BamFile output_fa = BamFile(output_fn, "wF", args.num_thread, genome_bam)
+    cdef Iterator iterator = Iterator(genome_bam, args.tid)
+    cdef bam1_t *dest_record = bam_init1()
+    cdef int i, return_value
+
+    try:
+        for i in range(seg_view.shape[0]):
+            return_value = iterator.next_record_by_offset(seg_view[i].file_offset)
+            if return_value < 0:
+                raise IOError(f"Failed to read record at offset {seg_view[i].file_offset}")
+            
+            trim_segment(
+                iterator.bam_record,
+                dest_record, i,
+                seg_view[i].query_start,
+                seg_view[i].query_end
+            )
+            output_fa.write(dest_record)
+    finally:
+        bam_destroy1(dest_record)
+        output_fa.close()
+        del output_fa
+        del iterator
+
+
+cdef output_highfreq_clusters_seqs(Cluster[::1] clt_view, Segment[::1] seg_view, BamFile genome_bam, Args args):
+    """
+    Output segment sequences of each high-frequency cluster for assembly.
+    """
+    cdef str output_fn
+    cdef BamFile output_fa
+    cdef Iterator iterator = Iterator(genome_bam, args.tid)
+    cdef bam1_t *dest_record = bam_init1()
     cdef int i, j
 
-    for i in range(cltView.shape[0]):
-        if isLowQualClt(&cltView[i]) or isSomaClt(&cltView[i]):
-            continue
-
-        outputFn = "tmp_assm/{}_{}.fa".format(args.tid, i)
-        outputFa = BamFile(outputFn, "wF", args.numThread, genomeBam)
-        for j in range(cltView[i].startIdx, cltView[i].endIdx):
-            if overhangIsShort(&segView[j], args.minOverhang):
+    try:
+        for i in range(clt_view.shape[0]):
+            if is_lowqual_clt(&clt_view[i]) or is_lowfreq_clt(&clt_view[i]):
                 continue
-            outputSingleSeq(segView, outputFa, iterator, destRecord, j)
-        
-        outputFa.close()
 
-    bam_destroy1(destRecord); del iterator
+            output_fn = "tmp_assm/{}_{}.fa".format(args.tid, i)
+            output_fa = BamFile(output_fn, "wF", args.num_thread, genome_bam)
+
+            for j in range(clt_view[i].start_idx, clt_view[i].end_idx):
+                if overhang_too_short(&seg_view[j], args.overhang):
+                    continue
+                output_single_seq(seg_view, output_fa, iterator, dest_record, j)
+
+            output_fa.close()
+    finally:
+        bam_destroy1(dest_record)
+        del iterator
 
 
-cpdef outputSomaCltSeqs(Cluster[::1] cltView, Segment[::1] segView, object cmdArgs, int tid):
+cpdef output_lowfreq_clusters_seq(Cluster[::1] clt_view, Segment[::1] seg_view, object cmd_args, int tid, int extra_thread):
+    """
+    Output one segment sequence for each low-frequency cluster as assembly.
+    """
     cdef int i, j
+    cdef int num_thread = 1 + extra_thread
     cdef Args args
-    cdef str outputFn
-    cdef BamFile outputFa
-    cdef BamFile genomeBam = BamFile(cmdArgs.genomeBamFn, "rb", cmdArgs.numThread)
-    cdef Iterator iterator = Iterator(genomeBam, tid)
-    cdef bam1_t *destRecord = bam_init1()
+    cdef str output_fn
+    cdef BamFile output_fa
+    cdef BamFile genome_bam = BamFile(cmd_args.genome_bam_fn, "rb", num_thread)
+    cdef Iterator iterator = Iterator(genome_bam, tid)
+    cdef bam1_t *dest_record = bam_init1()
 
-    args.minOverhang = cmdArgs.minOverhang
-    for i in range(cltView.shape[0]):
-        if isLowQualClt(&cltView[i]):
-            continue
-        
-        # Skip successfully assembled clusters
-        outputFn = "tmp_assm/{}_{}_assembled.fa".format(tid, i)
-        if os.path.isfile(outputFn):
-            if os.path.getsize(outputFn) != 0:
+    try:
+        args.overhang = cmd_args.overhang
+        for i in range(clt_view.shape[0]):
+            if is_lowqual_clt(&clt_view[i]):
                 continue
-        
-        outputFa = BamFile(outputFn, "wF", cmdArgs.numThread, genomeBam)
-        j = getOuputSegIdx(&cltView[i], &segView[0], args)
-        outputSingleSeq(segView, outputFa, iterator, destRecord, j)
-        outputFa.close()
 
-    bam_destroy1(destRecord); del iterator
-    genomeBam.close(); del genomeBam
+            # Skip successfully assembled clusters
+            output_fn = "tmp_assm/{}_{}_assembled.fa".format(tid, i)
+            if os.path.isfile(output_fn) and os.path.getsize(output_fn) != 0:
+                continue
+
+            output_fa = BamFile(output_fn, "wF", num_thread, genome_bam)
+            j = get_ouput_segidx(&clt_view[i], &seg_view[0], args)
+            output_single_seq(seg_view, output_fa, iterator, dest_record, j)
+            output_fa.close()
+    finally:
+        bam_destroy1(dest_record)
+        del iterator
+        genome_bam.close()
+        del genome_bam
 
 
-cpdef int outputReadAsAssm(Cluster[::1] cltView, dict allCltData, object cmdArgs, int i):
-    if cltView[i].numSegRaw < 3:
+cpdef int output_read_as_assmbly(Cluster[::1] clt_view, dict cluster_data_by_tid, object cmd_args, int i):
+    """
+    Output one segment sequence as assembly for high-frequency cluster that failed to be assembled.
+    """
+    if clt_view[i].numSegRaw < 3:
         return 0
 
-    cdef Segment[::1] segView = allCltData[cltView[i].tid][1]
-    cdef BamFile genomeBam = BamFile(cmdArgs.genomeBamFn, "rb", cmdArgs.numThread)
-    cdef Iterator iterator = Iterator(genomeBam, cltView[i].tid)
-    cdef bam1_t *destRecord = bam_init1()
-    cdef str outputFn = "tmp_assm/{}_{}_assm.fa".format(cltView[i].tid, cltView[i].idx)
-    cdef BamFile outputFa = BamFile(outputFn, "wF", cmdArgs.numThread, genomeBam)
+    cdef Segment[::1] seg_view = cluster_data_by_tid[clt_view[i].tid][1]
+    cdef BamFile genome_bam = BamFile(cmd_args.genome_bam_fn, "rb", cmd_args.num_thread)
+    cdef Iterator iterator = Iterator(genome_bam, clt_view[i].tid)
+    cdef bam1_t *dest_record = bam_init1()
+    cdef str output_fn = "tmp_assm/{}_{}_assm.fa".format(clt_view[i].tid, clt_view[i].idx)
+    cdef BamFile output_fa = BamFile(output_fn, "wF", cmd_args.num_thread, genome_bam)
     cdef Args args
 
-    args.minOverhang = cmdArgs.minOverhang
-    j = getOuputSegIdx(&cltView[i], &segView[0], args)
-    outputSingleSeq(segView, outputFa, iterator, destRecord, j)
-    
-    outputFa.close()
-    bam_destroy1(destRecord); del iterator
-    genomeBam.close(); del genomeBam
+    try:
+        args.overhang = cmd_args.overhang
+        j = get_ouput_segidx(&clt_view[i], &seg_view[0], args)
+        output_single_seq(seg_view, output_fa, iterator, dest_record, j)
+    finally:
+        output_fa.close()
+        bam_destroy1(dest_record)
+        del iterator
+        genome_bam.close()
+        del genome_bam
 
     return 1
 
 
-cdef outputSingleSeq(Segment[::1] segView, BamFile outputFa, Iterator iterator, bam1_t *destRecord, int j, int flankSize=3000):
-    cdef int start, end, retValue
+cdef output_single_seq(Segment[::1] seg_view, BamFile output_fa, Iterator iterator, bam1_t *dest_record, int j, int flank_size=3000):
+    """
+    Output a single sequence to the output file.
+    """
+    cdef int start, end, return_value
+    return_value = iterator.next_record_by_offset(seg_view[j].file_offset)
+    if return_value < 0:
+        raise IOError(f"Failed to read record at offset {seg_view[j].file_offset}")
 
-    retValue = iterator.cnext3(segView[j].fileOffset)
-    setTrimRegion(&segView[j], &start, &end, flankSize)
-    trimSegment(iterator.bamRcord, destRecord, j, start, end)
-    outputFa.write(destRecord)
+    setTrimRegion(&seg_view[j], &start, &end, flank_size)
+    trim_segment(iterator.bam_record, dest_record, j, start, end)
+    output_fa.write(dest_record)
 
 
-#########################
-### Flank Sequence IO ###
-#########################
-cpdef outputRefFlank(Cluster[::1] cltView, dict allCltData, int startIdx, int taskSize, object cmdArgs):
-    cdef int endIdx = startIdx + taskSize
-    if endIdx > cltView.shape[0]:
-        endIdx = cltView.shape[0]
-    
+cpdef output_reference_flank(Cluster[::1] clt_view, dict cluster_data_by_tid, tuple block, object cmd_args):
+    """
+    Output reference flank sequences for a range of clusters.
+
+    Parameters:
+    - clt_view: Array of Cluster objects.
+    - cluster_data_by_tid: Dictionary mapping TID to cluster data.
+    - block: Tuple (start_idx, end_idx) specifying the range of clusters to process.
+    - cmd_args: Command-line arguments object containing configuration.
+
+    This function resets the breakpoint of each cluster to the most common site
+    within its segments and extracts the reference flank sequences.
+    """
     # Reset breakpoint to most common site
+    start_idx, end_idx = block
     cdef object counter = Counter()
-    cdef Segment[::1] segView
-    for i in range(startIdx, endIdx):
-        segView = allCltData[cltView[i].tid][1]
-        for j in range(cltView[i].startIdx, cltView[i].endIdx):
-            if overhangIsShort(&segView[j], cmdArgs.minOverhang):
+    cdef Segment[::1] seg_view
+    for i in range(start_idx, end_idx):
+        seg_view = cluster_data_by_tid[clt_view[i].tid][1]
+        for j in range(clt_view[i].start_idx, clt_view[i].end_idx):
+            if overhang_too_short(&seg_view[j], cmd_args.overhang):
                 continue
-            counter[segView[j].refPosition] += 1
+            counter[seg_view[j].ref_position] += 1
         
-        cltView[i].refStart = counter.most_common(1)[0][0]
-        cltView[i].refEnd = cltView[i].refStart + 1
+        clt_view[i].ref_start = counter.most_common(1)[0][0]
+        clt_view[i].ref_end = clt_view[i].ref_start + 1
         counter.clear()
     
-    cdef bytes refFn = cmdArgs.refFn.encode('utf-8')
-    extractRefFlanks(refFn, &cltView[0], startIdx, endIdx)
+    # Extract reference flank sequences for the processed clusters
+    cdef bytes ref_fn = cmd_args.ref_fn.encode('utf-8')
+    extract_ref_flankseq(ref_fn, &clt_view[0], start_idx, end_idx)
 
 
-####################
-### Merge Output ###
-####################
-cpdef mergeOutput():
-    cdef str cmd = "cat tmp_anno/*cltFormated.txt | sort -k1,1 > tmp_anno/sorted_cltFormated.txt && " \
-          "cat tmp_anno/*annoFormated.txt | sort -k1,1 > tmp_anno/sorted_annoFormated.txt && " \
-          "join -1 1 -2 1 -t $'\t' -o '1.2 1.3 1.4 2.3 1.5 2.2 2.1 2.4 2.5 1.6 1.7 1.8 1.9 1.10 1.11 1.12 1.13 1.14 1.15' " \
-          "tmp_anno/sorted_cltFormated.txt tmp_anno/sorted_annoFormated.txt > result.txt"
-    subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
+cpdef merge_output():
+    """
+    Merge output files into a single result file.
+    """
+    command = (
+        "cat tmp_anno/*cltFormated.txt | sort -k1,1 > tmp_anno/sorted_cltFormated.txt && "
+        "cat tmp_anno/*annoFormated.txt | sort -k1,1 > tmp_anno/sorted_annoFormated.txt && "
+        "join -1 1 -2 1 -t $'\t' -o '1.2 1.3 1.4 2.3 1.5 2.2 2.1 2.4 2.5 1.6 1.7 1.8 1.9 1.10 1.11 1.12 1.13 1.14 1.15' "
+        "tmp_anno/sorted_cltFormated.txt tmp_anno/sorted_annoFormated.txt > result.txt"
+    )
+    subprocess.run(command, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')

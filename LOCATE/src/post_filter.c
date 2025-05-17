@@ -1,7 +1,7 @@
 #include "post_filter.h"
 
 // Perform post-filtering for different TE class
-void postFilter(Cluster *clt)
+void post_filter(Cluster *clt)
 {
     uint32_t CLT_CLASS_MASK = 0xf8000;
     switch (clt->flag & CLT_CLASS_MASK)

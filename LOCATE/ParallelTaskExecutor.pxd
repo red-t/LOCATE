@@ -1,7 +1,7 @@
 from .FileIO cimport *
-from .Cluster cimport bamIsInvalid, getMapLenAndDiv, getHighQualClts
+from .Cluster cimport bam_is_invalid, get_mapping_length_and_divergence, get_high_quality_clusters
 
 cdef extern from "src/ltr_utils.h":
-    void defineLTR(const char *teFn, const char *teClassFn)
+    void define_ltr(const char *te_fn, const char *class_fn)
 
-cpdef object runInParallel(object cmdArgs)
+cpdef object run_in_parallel(object cmd_args)

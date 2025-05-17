@@ -4,7 +4,7 @@ cdef extern from "src/io_utils.h":
     ###################
     ### Cluster I/O ###
     ###################
-    void outputClt(Cluster *cltArr, int startIdx, int endIdx, const char *refFn, const char *teFn)
+    void output_clusters(Cluster *clt_arr, int start_idx, int end_idx, const char *ref_fn, const char *te_fn)
 
 cdef extern from "src/anno_utils.h" nogil:
     ##################
@@ -14,31 +14,31 @@ cdef extern from "src/anno_utils.h" nogil:
         int         idx
         int         cltTid
         int         cltIdx
-        int         queryStart
-        int         queryEnd
+        int         query_start
+        int         query_end
         uint8_t     strand
         int         tid
-        int         refStart
-        int         refEnd
+        int         ref_start
+        int         ref_end
         uint32_t    flag
         int         extra
     
     ###################################
     ### Annotate Insertion sequence ###
     ###################################
-    int fillAnnoArr(Cluster *clt, Annotation *annoArr, uint32_t *classArr, int idx)
-    void annoTsd(Cluster *clt, Annotation *annoArr, int numAnno)
-    void setInsStruc(Cluster *clt, Annotation *annoArr, int numAnno, uint32_t *classArr, int *sizeArr, int *ltrArr)
+    int fill_anno_arr(Cluster *clt, Annotation *anno_arr, uint32_t *class_arr, int idx)
+    void annotate_tsd(Cluster *clt, Annotation *anno_arr, int num_anno)
+    void set_ins_structure(Cluster *clt, Annotation *anno_arr, int num_anno, uint32_t *class_arr, int *size_arr, int *ltr_arr)
 
     ######################
     ### Annotation I/O ###
     ######################
-    void outputAnno(Annotation *annoArr, int numAnno, int startIdx, const char *teFn)
+    void output_annotations(Annotation *anno_arr, int num_anno, int start_idx, const char *te_fn)
 
 cdef extern from "src/post_filter.h":
     ###################
     ### Cluster I/O ###
     ###################
-    void postFilter(Cluster *clt)
+    void post_filter(Cluster *clt)
 
-cpdef annotateCluster(Cluster[::1] cltView, int startIdx, int taskSize, object cmdArgs)
+cpdef annotate_cluster(Cluster[::1] clt_view, tuple block, object cmd_args)

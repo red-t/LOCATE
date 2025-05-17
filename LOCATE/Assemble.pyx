@@ -7,71 +7,82 @@ from cpython cimport PyBytes_FromStringAndSize
 ######################
 ### Local Assembly ###
 ######################
-cdef int getMinEdge(int numSegRaw):
-    if numSegRaw < 5:
+cdef int get_min_edge(int num_seg_raw):
+    # Dynamically set min_edge
+    if num_seg_raw < 5:
         return 1
-    elif numSegRaw < 10:
+    elif num_seg_raw < 10:
         return 2
-    elif numSegRaw < 40:
+    elif num_seg_raw < 40:
         return 3
-    elif numSegRaw < 70:
+    elif num_seg_raw < 70:
         return 4
     else:
         return 5
 
 
-cpdef assembleCluster(Cluster[::1] cltView, dict allCltData, int startIdx, int taskSize, object cmdArgs):
-    cdef int numThread = cmdArgs.numThread
-    cdef int nodeLen = cmdArgs.nodeLen
-    cdef int i, endIdx, minEdge, rounds
+cpdef assemble_cluster(Cluster[::1] clt_view, dict cluster_data_by_tid, tuple block, object cmd_args, int extra_thread):
+    """
+    Assembles clusters into sequences using multiple steps, including primary assembly, polishing, and recalibration.
+
+    Parameters:
+        clt_view (Cluster[::1]): Memory view of the cluster array.
+        cluster_data_by_tid (dict): A dictionary where the key is the target ID (tid) and the value is a tuple containing:
+                                    - clt_arr: Array of clusters.
+                                    - seg_arr: Array of segments.
+        block (tuple): A tuple (start_idx, end_idx) specifying the range of clusters to process.
+        cmd_args (object): Command-line arguments or configuration object containing file paths and parameters.
+        extra_thread (int): Number of additional threads to use.
+    """
+
+    cdef int num_thread = 1 + extra_thread
+    cdef int node_len = cmd_args.node_len
+    cdef int i, min_edge, rounds
     cdef str cmd, prefix
-
-    endIdx = startIdx + taskSize
-    if endIdx > cltView.shape[0]:
-        endIdx = cltView.shape[0]
-
-    for i in range(startIdx, endIdx):
-        if isSomaClt(&cltView[i]):
+    
+    start_idx, end_idx = block
+    for i in range(start_idx, end_idx):
+        if is_lowfreq_clt(&clt_view[i]):
             continue
 
-        minEdge = getMinEdge(cltView[i].numSegRaw)
-        if cmdArgs.minEdge > 0:
-            minEdge = cmdArgs.minEdge
+        min_edge = get_min_edge(clt_view[i].numSegRaw)
+        if cmd_args.min_edge > 0:
+            min_edge = cmd_args.min_edge
 
-        # 1. Primary assembling
-        prefix = "tmp_assm/{}_{}".format(cltView[i].tid, cltView[i].idx)
+        # Step 1: Primary assembling
+        prefix = "tmp_assm/{}_{}".format(clt_view[i].tid, clt_view[i].idx)
         rounds = 0
         while rounds < 5:
             rounds += 1
             cmd = "wtdbg2 -p 5 -k 15 -l 256 -e {0} -S 1 -A --rescue-low-cov-edges --node-len {1} --ctg-min-length {1} " \
-                "--ctg-min-nodes 1 -q -t {2} -i {3}.fa -fo {3}".format(minEdge, nodeLen, numThread, prefix)
+                "--ctg-min-nodes 1 -q -t {2} -i {3}.fa -fo {3}".format(min_edge, node_len, num_thread, prefix)
             subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
             if os.path.isfile(f"{prefix}.ctg.lay.gz") == False:
                 continue
             
-            cmd = "wtpoa-cns -q -c 1 -t {0} -i {1}.ctg.lay.gz -fo {1}_assm.fa".format(numThread, prefix)
+            cmd = "wtpoa-cns -q -c 1 -t {0} -i {1}.ctg.lay.gz -fo {1}_assm.fa".format(num_thread, prefix)
             subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
             if os.path.isfile(f"{prefix}_assm.fa") and (os.path.getsize(f"{prefix}_assm.fa") != 0):
                 break
         
         if (not os.path.isfile(f"{prefix}_assm.fa")) or (os.path.getsize(f"{prefix}_assm.fa") == 0):
-            if not outputReadAsAssm(cltView, allCltData, cmdArgs, i):
+            if output_read_as_assmbly(clt_view, cluster_data_by_tid, cmd_args, i) == 0:
                 continue
 
-        # 2. First round polishing
+        # Step 2: First round polishing
         cmd = "minimap2 -aY {0}_assm.fa {0}.fa | samtools sort | samtools view -bhS -F 3332 -o {0}_RawToAssm.bam && " \
             "samtools consensus --ff 3332 -m simple -c 0 -d 1 -H 0.9 {0}_RawToAssm.bam -o {0}_assembled.fa".format(prefix)
         subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
 
-        # 3. Second round polishing
+        # Step 3: Second round polishing
         cmd = "minimap2 -aY {0}_assembled.fa {0}.fa | samtools sort | samtools view -bhS -F 3332 -o {0}_RawToAssm.bam && " \
             "samtools consensus --ff 3332 -m simple -c 0 -d 1 -H 0.9 {0}_RawToAssm.bam -o {0}_assembled.fa".format(prefix)
         subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
 
-        # 4. Recalibration
-        recalibration(prefix, cmdArgs)
+        # Step 4: Recalibration
+        recalibration(prefix, cmd_args)
 
-        # 5. Remove N-bases
+        # Step 5: Remove N-bases
         cmd = (
             "sed 's/N//g' {0}_assembled.fa | "
             "awk '{{if($1~/^>/){{ctg=$1; a[ctg]=\"\"}} else{{a[ctg]=a[ctg]\"\"$1}}}} "
@@ -84,8 +95,8 @@ cpdef assembleCluster(Cluster[::1] cltView, dict allCltData, int startIdx, int t
 #####################
 ### Recalibration ###
 #####################
-cdef recalibration(str prefix, object cmdArgs):
-    # 1. Map raw reads to polished seqs
+cdef recalibration(str prefix, object cmd_args):
+    # Step 1: Map raw reads to polished seqs
     os.rename(f"{prefix}_assembled.fa", f"{prefix}_polished.fa")
     cmd = "minimap2 -aY {0}_polished.fa {0}.fa | " \
         "samtools sort | samtools view -bhS -F 3332 -o {0}_RawToPolish.bam && " \
@@ -95,78 +106,78 @@ cdef recalibration(str prefix, object cmdArgs):
         os.rename(f"{prefix}_polished.fa", f"{prefix}_assembled.fa")
         return
     
-    # 2. Load files
-    cdef bytes inputFn = f"{prefix}_polished.fa".encode("utf-8")
-    cdef faidx_t *inputFa = fai_load(inputFn)
-    cdef BamFile inputBam = BamFile(f"{prefix}_RawToPolish.bam", "rb")
-    cdef object outputFa = open(f"{prefix}_assembled.fa", "w")
+    # Step 2: Load files
+    cdef bytes input_fn = f"{prefix}_polished.fa".encode("utf-8")
+    cdef faidx_t *input_fa = fai_load(input_fn)
+    cdef BamFile input_bam = BamFile(f"{prefix}_RawToPolish.bam", "rb")
+    cdef object output_fa = open(f"{prefix}_assembled.fa", "w")
 
-    # 3. Initilize
-    cdef int tid, numRef = faidx_nseq(inputFa)
-    cdef int refLen, maxLen = 0
-    for tid in range(numRef):
-        refLen = faidx_seq_len(inputFa, faidx_iseq(inputFa, tid))
-        if refLen > maxLen:
-            maxLen = refLen
+    # Step 3: Initilize
+    cdef int tid, num_ref = faidx_nseq(input_fa)
+    cdef int ref_len, max_len = 0
+    for tid in range(num_ref):
+        ref_len = faidx_seq_len(input_fa, faidx_iseq(input_fa, tid))
+        if ref_len > max_len:
+            max_len = ref_len
 
-    # 4. Recalibrate
-    cdef object queryArr = np.zeros(5*maxLen, dtype=np.int32)
-    cdef object refArr = np.zeros(5*maxLen, dtype=np.int32)
-    cdef int refStart, refEnd, skipNext
-    cdef const char *cRefName
-    cdef char *cRefSeq
-    cdef str refSeq, recalibratedSeq
+    # Step 4: Recalibrate
+    cdef object query_arr = np.zeros(5 * max_len, dtype=np.int32)
+    cdef object ref_arr = np.zeros(5 * max_len, dtype=np.int32)
+    cdef int ref_start, ref_end, skip_next
+    cdef const char *ref_name_char
+    cdef char *ref_seq_char
+    cdef str ref_seq, recalibrated_seq
 
-    for tid in range(numRef):
-        # 5. Load sequence
-        cRefName = faidx_iseq(inputFa, tid)
-        refLen = faidx_seq_len(inputFa, cRefName)
-        cRefSeq = faidx_fetch_seq(inputFa, cRefName, 0, refLen, &refLen)
-        refSeq = cRefSeq.decode('utf-8')
+    for tid in range(num_ref):
+        # Step 5: Load sequence
+        ref_name_char = faidx_iseq(input_fa, tid)
+        ref_len = faidx_seq_len(input_fa, ref_name_char)
+        ref_seq_char = faidx_fetch_seq(input_fa, ref_name_char, 0, ref_len, &ref_len)
+        ref_seq = ref_seq_char.decode('utf-8')
         
-        # 6. Define homopolymer regions
-        polymerRegions = getPolymerRegions(refSeq, refLen)
+        # Step 6: Define homopolymer regions
+        polymer_regions = get_polymer_regions(ref_seq, ref_len)
         
-        # 7. Collect query homo-polymers
-        iterator = Iterator(inputBam, tid)
-        queryPolymers = getQueryPolymers(iterator, queryArr, refArr, polymerRegions, refSeq)
+        # Step 7: Collect query homo-polymers
+        iterator = Iterator(input_bam, tid)
+        query_polymers = get_query_polymers(iterator, query_arr, ref_arr, polymer_regions, ref_seq)
         
-        # 8. Output recalibrated sequence
-        outputFa.write(">" + cRefName.decode('utf-8') + "\n")
-        skipNext = 0
-        for refStart in polymerRegions:
-            refEnd = polymerRegions[refStart]
+        # Step 8: Output recalibrated sequence
+        output_fa.write(">" + ref_name_char.decode('utf-8') + "\n")
+        skip_next = 0
+        for ref_start in polymer_regions:
+            ref_end = polymer_regions[ref_start]
 
             # Ignore long homopolymer, un-covered region
-            if (refEnd - refStart + 1 > 20) or (refStart not in queryPolymers):
-                outputFa.write(refSeq[refStart:refEnd+1])
+            if (ref_end - ref_start + 1 > 20) or (ref_start not in query_polymers):
+                output_fa.write(ref_seq[ref_start:ref_end+1])
                 continue
             
             # If previous base/homo-polymer has been recalibrated, skip this one
-            if skipNext:
-                outputFa.write(refSeq[refStart:refEnd+1])
-                skipNext = 0
+            if skip_next:
+                output_fa.write(ref_seq[ref_start:ref_end+1])
+                skip_next = 0
                 continue
             
-            recalibratedSeq, skipNext = getRecalibratedSeq(queryPolymers, refSeq, refStart, refEnd)
-            outputFa.write(recalibratedSeq)
+            recalibrated_seq, skip_next = get_recalibrated_seq(query_polymers, ref_seq, ref_start, ref_end)
+            output_fa.write(recalibrated_seq)
         
-        outputFa.write("\n")
+        output_fa.write("\n")
         del iterator
 
     # 9. Close files
-    fai_destroy(inputFa)
-    outputFa.close()
-    inputBam.close()
+    fai_destroy(input_fa)
+    output_fa.close()
+    input_bam.close()
 
 
-cdef object getPolymerRegions(str refSeq, int refLen):
+cdef object get_polymer_regions(str ref_seq, int ref_len):
     cdef int start = 0
     cdef int end = 1
     cdef object regions = OrderedDict()
 
-    while end < refLen:
-        if refSeq[end] == refSeq[start]:
+    while end < ref_len:
+        if ref_seq[end] == ref_seq[start]:
             end += 1
             continue
         
@@ -179,213 +190,213 @@ cdef object getPolymerRegions(str refSeq, int refLen):
     return regions
 
 
-cdef object getQueryPolymers(Iterator iterator, int[::1] queryArr, int[::1] refArr, object polymerRegions, str refSeq):
-    cdef int refPos, refStart, refEnd
-    cdef int queryPos, queryStart, queryEnd
-    cdef int i, retValue, numPairs
-    cdef int refLen = len(refSeq)
-    cdef object queryPolymers = OrderedDict()
-    cdef str readSeq, querySeq
+cdef object get_query_polymers(Iterator iterator, int[::1] query_arr, int[::1] ref_arr, object polymer_regions, str ref_seq):
+    cdef int ref_pos, ref_start, ref_end
+    cdef int query_pos, query_start, query_end
+    cdef int i, return_value, num_pairs
+    cdef int ref_len = len(ref_seq)
+    cdef object query_polymers = OrderedDict()
+    cdef str read_seq, query_seq
     
     while True:
         # 1. Load read
-        retValue = iterator.cnext1()
-        if retValue < 0:
-            return queryPolymers
+        return_value = iterator.next_record_by_tid()
+        if return_value < 0:
+            return query_polymers
 
         # 2. Get aligned-pairs
-        readSeq = getReadSeq(iterator)
-        numPairs = getAlignedPairs(iterator.bamRcord, &queryArr[0], &refArr[0])
-        refEnd = -2
+        read_seq = get_read_seq(iterator)
+        num_pairs = get_aligned_pairs(iterator.bam_record, &query_arr[0], &ref_arr[0])
+        ref_end = -2
 
         # 3. Collect homo-polymer lengths
-        for i in range(numPairs):
-            queryPos = queryArr[i]
-            refPos = refArr[i]
+        for i in range(num_pairs):
+            query_pos = query_arr[i]
+            ref_pos = ref_arr[i]
 
             # 4. Read cover homo-polymer start
-            if refPos in polymerRegions:
-                queryStart = queryPos
-                refStart = refPos
-                refEnd = polymerRegions[refPos]
+            if ref_pos in polymer_regions:
+                query_start = query_pos
+                ref_start = ref_pos
+                ref_end = polymer_regions[ref_pos]
 
                 # Single base
-                if refStart == refEnd:
-                    if queryStart < 0:
-                        queryStart = -1
-                        queryEnd = -2
-                        querySeq = ""
+                if ref_start == ref_end:
+                    if query_start < 0:
+                        query_start = -1
+                        query_end = -2
+                        query_seq = ""
                     else:
                         # Find real start
-                        queryPos = checkLeftSide(queryArr, refArr, i-1, 0)
-                        if queryPos >= 0:
-                            queryStart = queryPos + 1 
+                        query_pos = check_left_side(query_arr, ref_arr, i-1, 0)
+                        if query_pos >= 0:
+                            query_start = query_pos + 1 
                         # Find real end
-                        queryPos = checkRightSide(queryArr, refArr, numPairs, i+1, refLen)
-                        if queryPos >= 0:
-                            queryEnd = queryPos - 1
+                        query_pos = check_right_side(query_arr, ref_arr, num_pairs, i+1, ref_len)
+                        if query_pos >= 0:
+                            query_end = query_pos - 1
 
-                        querySeq = readSeq[queryStart:queryEnd+1]
+                        query_seq = read_seq[query_start:query_end+1]
                     
-                    if queryStart == queryEnd:
-                        extraLen = getExtraLen(queryStart, readSeq, refSeq[refStart])
+                    if query_start == query_end:
+                        extra_len = get_extra_len(query_start, read_seq, ref_seq[ref_start])
                     else:
-                        extraLen = 0
+                        extra_len = 0
                     
-                    if refStart in queryPolymers:
-                        queryPolymers[refStart].append((querySeq, queryEnd-queryStart+1, extraLen))
+                    if ref_start in query_polymers:
+                        query_polymers[ref_start].append((query_seq, query_end-query_start+1, extra_len))
                     else:
-                        queryPolymers[refStart] = [(querySeq, queryEnd-queryStart+1, extraLen)]
+                        query_polymers[ref_start] = [(query_seq, query_end-query_start+1, extra_len)]
                     continue
                 
                 # Homo-polymer region
-                if queryStart < 0:
+                if query_start < 0:
                     # Correction for boundary deletion
-                    queryPos = checkRightSide(queryArr, refArr, numPairs, i+1, refEnd)
-                    if queryPos < 0:
-                        refEnd = -2
+                    query_pos = check_right_side(query_arr, ref_arr, num_pairs, i+1, ref_end)
+                    if query_pos < 0:
+                        ref_end = -2
                     else:
-                        queryStart = queryPos
+                        query_start = query_pos
                 else:
                     # Correction for boundary insertion
-                    queryPos = checkLeftSide(queryArr, refArr, i-1, 0)
-                    if queryPos >= 0:
-                        queryStart = queryPos + 1            
+                    query_pos = check_left_side(query_arr, ref_arr, i-1, 0)
+                    if query_pos >= 0:
+                        query_start = query_pos + 1            
             
             # 5. Read cover homo-polymer end
-            elif refPos == refEnd:
-                queryEnd = queryPos
-                if queryEnd < 0:
+            elif ref_pos == ref_end:
+                query_end = query_pos
+                if query_end < 0:
                     # Correction for boundary deletion
-                    queryPos = checkLeftSide(queryArr, refArr, i-1, refStart)
-                    if queryPos < 0:
-                        refEnd = -2
+                    query_pos = check_left_side(query_arr, ref_arr, i-1, ref_start)
+                    if query_pos < 0:
+                        ref_end = -2
                         continue
                     else:
-                        queryEnd = queryPos
+                        query_end = query_pos
                 else:
-                    queryPos = checkRightSide(queryArr, refArr, numPairs, i+1, refLen)
-                    if queryPos >= 0:
-                        queryEnd = queryPos - 1
+                    query_pos = check_right_side(query_arr, ref_arr, num_pairs, i+1, ref_len)
+                    if query_pos >= 0:
+                        query_end = query_pos - 1
                 
-                if queryEnd - queryStart == refEnd - refStart:
-                    extraLen = getExtraLen(queryStart, readSeq, refSeq[refStart])
+                if query_end - query_start == ref_end - ref_start:
+                    extra_len = get_extra_len(query_start, read_seq, ref_seq[ref_start])
                 else:
-                    extraLen = 0
+                    extra_len = 0
                 
                 # 6. Collect query homo-polymers
-                if refStart in queryPolymers:
-                    queryPolymers[refStart].append((readSeq[queryStart:queryEnd+1], queryEnd - queryStart + 1, extraLen))
+                if ref_start in query_polymers:
+                    query_polymers[ref_start].append((read_seq[query_start:query_end+1], query_end - query_start + 1, extra_len))
                 else:
-                    queryPolymers[refStart] = [(readSeq[queryStart:queryEnd+1], queryEnd - queryStart + 1, extraLen)]
+                    query_polymers[ref_start] = [(read_seq[query_start:query_end+1], query_end - query_start + 1, extra_len)]
                 
-                refEnd = -2
+                ref_end = -2
 
 
-cdef str getReadSeq(Iterator iterator):
-    cdef int i, readLen = iterator.bamRcord.core.l_qseq
-    cdef bytes bSeq = PyBytes_FromStringAndSize(NULL, readLen)
+cdef str get_read_seq(Iterator iterator):
+    cdef int i, read_len = iterator.bam_record.core.l_qseq
+    cdef bytes bSeq = PyBytes_FromStringAndSize(NULL, read_len)
     cdef char *cSeq = <char*>bSeq
 
-    for i in range(readLen):
-        cSeq[i] = seq_nt16_str[bam_seqi(bam_get_seq(iterator.bamRcord), i)]
+    for i in range(read_len):
+        cSeq[i] = seq_nt16_str[bam_seqi(bam_get_seq(iterator.bam_record), i)]
 
     return bSeq.decode('utf-8')
 
 
-cdef int checkLeftSide(int[::1] queryArr, int[::1] refArr,  int i, int leftMost):
+cdef int check_left_side(int[::1] query_arr, int[::1] ref_arr,  int i, int leftMost):
     while i >= 0:
-        queryPos = queryArr[i]
-        refPos = refArr[i]
-        if (queryPos < 0) or (refPos < 0):
+        query_pos = query_arr[i]
+        ref_pos = ref_arr[i]
+        if (query_pos < 0) or (ref_pos < 0):
             i -= 1
             continue
-        if refPos < leftMost:
+        if ref_pos < leftMost:
             return -1
-        return queryPos
+        return query_pos
 
     return -1
 
 
-cdef int checkRightSide(int[::1] queryArr, int[::1] refArr, int numPairs,  int i, int rightMost):
-    while i < numPairs:
-        queryPos = queryArr[i]
-        refPos = refArr[i]
-        if (queryPos < 0) or (refPos < 0):
+cdef int check_right_side(int[::1] query_arr, int[::1] ref_arr, int num_pairs,  int i, int rightMost):
+    while i < num_pairs:
+        query_pos = query_arr[i]
+        ref_pos = ref_arr[i]
+        if (query_pos < 0) or (ref_pos < 0):
             i += 1
             continue
-        if refPos > rightMost:
+        if ref_pos > rightMost:
             return -1
-        return queryPos
+        return query_pos
 
     return -1
 
 
-cdef int getExtraLen(int queryStart, str readSeq, str polymerBase):
-    if queryStart == 0:
+cdef int get_extra_len(int query_start, str read_seq, str polymerBase):
+    if query_start == 0:
         return 0    
-    if readSeq[queryStart-1] == polymerBase:
+    if read_seq[query_start-1] == polymerBase:
         return 1
     else:
         return 0
 
 
-cdef int getMostCommonLen(object queryPolymers, int refStart, int refEnd):
-    cdef object counter = Counter([p[1] + p[2] for p in queryPolymers[refStart]])
-    cdef int refLen = refEnd - refStart + 1
-    cdef int refCount = counter[refLen]
-    cdef int altLen, altCount
+cdef int get_most_common_len(object query_polymers, int ref_start, int ref_end):
+    cdef object counter = Counter([p[1] + p[2] for p in query_polymers[ref_start]])
+    cdef int ref_len = ref_end - ref_start + 1
+    cdef int ref_count = counter[ref_len]
+    cdef int alt_len, alt_count
 
-    for altLen, altCount in counter.most_common(2):
-        if altLen != refLen:
+    for alt_len, alt_count in counter.most_common(2):
+        if alt_len != ref_len:
             break
     
-    if altCount <= refCount:
-        return refLen
+    if alt_count <= ref_count:
+        return ref_len
     else:
-        return altLen
+        return alt_len
 
 
-cdef tuple getRecalibratedSeq(object queryPolymers, str refSeq, int refStart, int refEnd):
+cdef tuple get_recalibrated_seq(object query_polymers, str ref_seq, int ref_start, int ref_end):
     # 1. Get most common length
-    cdef int mostCommonLen = getMostCommonLen(queryPolymers, refStart, refEnd)
-    if mostCommonLen == 0:
+    cdef int most_common_len = get_most_common_len(query_polymers, ref_start, ref_end)
+    if most_common_len == 0:
         return '', 1
 
     # 2. Initialize counter for each position
-    cdef list positionCounters = [defaultdict(int) for _ in range(mostCommonLen)]
+    cdef list position_counters = [defaultdict(int) for _ in range(most_common_len)]
     cdef object polymer
-    cdef int i, queryLen
-    cdef str querySeq, base
+    cdef int i, query_len
+    cdef str query_seq, base
     
     # 3. Count for each position
-    for polymer in queryPolymers[refStart]:
-        queryLen = polymer[1]
-        if queryLen != mostCommonLen:
+    for polymer in query_polymers[ref_start]:
+        query_len = polymer[1]
+        if query_len != most_common_len:
             continue
         
-        querySeq = polymer[0]
-        for i in range(mostCommonLen):
-            base = querySeq[i]
-            positionCounters[i][base] += 1
+        query_seq = polymer[0]
+        for i in range(most_common_len):
+            base = query_seq[i]
+            position_counters[i][base] += 1
     
     # 4. Get most common base for each position
     cdef list result = []
     cdef object counter
-    cdef str refBase = refSeq[refStart]
-    cdef int refCount
-    if len(positionCounters[0]) == 0:
-        return refSeq[refStart:refEnd+1], 0
+    cdef str ref_base = ref_seq[ref_start]
+    cdef int ref_count
+    if len(position_counters[0]) == 0:
+        return ref_seq[ref_start:ref_end+1], 0
     else:
-        for counter in positionCounters:
+        for counter in position_counters:
             base = max(counter, key=counter.get)
-            refCount = counter[refBase] # 0 if refBase not exists
-            if refCount >= counter[base]:
-                result.append(refBase)
+            ref_count = counter[ref_base] # 0 if ref_base not exists
+            if ref_count >= counter[base]:
+                result.append(ref_base)
             else:
                 result.append(base)
 
-        if (refEnd - refStart + 1) == mostCommonLen:
+        if (ref_end - ref_start + 1) == most_common_len:
             return ''.join(result), 0
         else:
             return ''.join(result), 1

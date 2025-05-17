@@ -5,10 +5,10 @@
 #include "io_utils.h"
 
 /// @brief Define and return LTR sizes for all LTR-class TE
-void defineLTR(const char *teFn, const char *teClassFn);
+void define_ltr(const char *te_fn, const char *teClassFn);
 
 /// @brief Load TE class information
-int *getClassArr(int numTe, const char *teClassFn);
+int *get_class_arr(int numTe, const char *teClassFn);
 
 /// @brief Output left-/right- half of LTR-class TE separately
 void outputSeq(int tid, faidx_t *teFa);

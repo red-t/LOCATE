@@ -4,34 +4,39 @@ from libc.errno  cimport errno
 from libc.string cimport strerror
 
 cdef class BamFile:
-    """BamFile(str filePath, str mode, int numThread=1, BamFile template=None)"""
+    """
+    BamFile(str file_path, str mode, int num_thread=1, BamFile template=None)
+    
+    A class for reading/writing BAM/FASTA files.
+    """
 
-    cdef char       *filePath
-    cdef char       *indexFilePath
+    cdef char       *file_path
+    cdef char       *index_file_path
     cdef char       *mode
-    cdef int        numThread
-    cdef htsFile    *htsFile
+    cdef int        num_thread
+    cdef htsFile    *hts_file
     cdef hts_idx_t  *index
     cdef sam_hdr_t  *header
 
-    cdef void      openFile(self, BamFile template=*)
-    cdef htsFile   *openHtsFile(self) except? NULL
-    cdef void      write(self, bam1_t *bam)
+    cdef void      open_bam_file(self, BamFile template=*)
+    cdef htsFile   *_open_hts_file(self) except? NULL
+    cdef void      write(self, bam1_t *bam_record)
 
 
 cdef class Iterator:
-    """Iterator(BamFile bamFile, int tid)
+    """
+    Iterator(BamFile bamFile, int tid)
 
     A class for iterating over mapped reads in single chromosome.
     """
-    cdef bam1_t     *bamRcord
-    cdef htsFile    *htsFile
-    cdef hts_itr_t  *iter
+    cdef bam1_t     *bam_record
+    cdef htsFile    *hts_file
+    cdef hts_itr_t  *hts_iter
     cdef int64_t    offset
 
-    cdef int cnext1(self)
-    cdef int cnext2(self)
-    cdef int cnext3(self, int64_t offset)
+    cdef int next_record_by_tid(self)
+    cdef int next_record(self)
+    cdef int next_record_by_offset(self, int64_t offset)
 
 
 cdef extern from "src/AIList.h" nogil:
@@ -43,7 +48,7 @@ cdef extern from "src/AIList.h" nogil:
     
     AiList *initAiList()
     void destroyAiList(AiList *ail)
-    void readBED(AiList *ail, const char *bedFn, const char *targetChrom)
+    void readBED(AiList *ail, const char *bed_fn, const char *targetChrom)
     void constructAiList(AiList *ail, int minCoverageLen)
 
 
@@ -77,10 +82,10 @@ cdef extern from "src/cluster_utils.h" nogil:
     ctypedef packed struct Cluster:
         int         tid
         int         idx
-        int         refStart
-        int         refEnd
-        int         startIdx
-        int         endIdx
+        int         ref_start
+        int         ref_end
+        int         start_idx
+        int         end_idx
         float       numSeg
         uint8_t     cltType
         uint8_t     locationType
@@ -117,25 +122,25 @@ cdef extern from "src/cluster_utils.h" nogil:
         int         repTid
     
     ctypedef struct Args:
-        int         numThread
+        int         num_thread
         int         tid
-        int         minSegLen
-        int         maxDistance
-        int         minOverhang
-        float       bgDiv
-        float       bgDepth
-        float       bgReadLen
-        htsFile     *genomeBam
-        bam1_t      *firstBamRecord
-        bam1_t      *secondBamRecord
-        AiList      *repeatAiList
-        AiList      *gapAiList
-        AiList      *blackAiList
+        int         min_seg_len
+        int         max_dist
+        int         overhang
+        float       bg_div
+        float       bg_depth
+        float       bg_read_len
+        htsFile     *genome_bam
+        bam1_t      *first_bam_record
+        bam1_t      *second_bam_record
+        AiList      *repeat_ailist
+        AiList      *gap_ailist
+        AiList      *blacklist_ailist
     
     ########################
     ### Define Candidate ###
     ########################
-    int overhangIsShort(Segment *segment, int minOverhang)
+    int overhang_too_short(Segment *segment, int overhang)
 
 
 cdef extern from "src/seg_utils.h" nogil:
@@ -143,71 +148,71 @@ cdef extern from "src/seg_utils.h" nogil:
     ### Structures ###
     ##################
     ctypedef packed struct Segment:
-        uint8_t     mapQual
-        int         queryStart
-        int         queryEnd
-        int         refPosition
-        uint8_t     segType
-        uint8_t     alnType
-        int64_t     fileOffset
-        int         alnRefStart
-        int         alnRefEnd
+        uint8_t     map_qual
+        int         query_start
+        int         query_end
+        int         ref_position
+        uint8_t     seg_type
+        uint8_t     aln_type
+        int64_t     file_offset
+        int         aln_refstart
+        int         aln_refend
         uint8_t     order
         uint8_t     numSeg
         int         overhang
-        int         matchLen
-        int         readLen
-        uint8_t     alnLocationType
-        uint8_t     numTeAlignment
-        int         sumQueryMapLen
-        float       sumAlnScore
-        float       sumDivergence
-        int         startIdx
-        int         endIdx
+        int         match_len
+        int         read_len
+        uint8_t     aln_location_type
+        uint8_t     num_te_aln
+        int         sum_query_maplen
+        float       sum_aln_score
+        float       sum_divergence
+        int         start_idx
+        int         end_idx
     
     ###############################
     ### Initialize TeAlignments ###
     ###############################
-    int bamIsInvalid(bam1_t *bam)
+    int bam_is_invalid(bam1_t *bam)
     
     ####################
     ### Trim Segment ###
     ####################
-    int trimSegment(bam1_t *sourceRecord, bam1_t *destRecord, int segIdx, int sourceStart, int sourceEnd)
+    int trim_segment(bam1_t *source_record, bam1_t *dest_record, int seg_idx, int source_start, int source_end)
 
     #####################
     ### Alinged Pairs ###
     #####################
-    int getAlignedPairs(bam1_t *read, int *queryArr, int *refArr)
+    int get_aligned_pairs(bam1_t *read, int *query_arr, int *ref_arr)
 
 
 cdef extern from "src/io_utils.h" nogil:
     ###########################
     ### Segment Sequence IO ###
     ###########################
-    int isLowQualClt(Cluster *clt)
-    int isSomaClt(Cluster *clt)
+    int is_lowqual_clt(Cluster *clt)
+    int is_lowfreq_clt(Cluster *clt)
 
-    int getOuputSegIdx(Cluster *clt, Segment *segArr, Args args)
-    void setTrimRegion(Segment *segment, int *start, int *end, int flankSize)
+    int get_ouput_segidx(Cluster *clt, Segment *seg_arr, Args args)
+    void setTrimRegion(Segment *segment, int *start, int *end, int flank_size)
 
     #########################
     ### Flank Sequence IO ###
     #########################
-    void extractRefFlanks(char *refFn, Cluster *cltArr, int startIdx, int endIdx)
+    void extract_ref_flankseq(char *ref_fn, Cluster *clt_arr, int start_idx, int end_idx)
 
     #############################
     ### Insertion Sequence IO ###
     #############################
-    void extractIns(Cluster *clt)
-    void reExtractIns(Cluster *clt)
+    void extract_ins_seq(Cluster *clt)
+    void re_extract_ins_seq(Cluster *clt)
 
 
-cdef Args newArgs(int tid, float bgDiv, float bgDepth, float bgReadLen, object cmdArgs)
-cdef AiList* newAiList(str bedFn, const char *chrom)
-cdef ouputAllSegSeqs(Segment[::1] segView, BamFile genomeBam, Args args)
-cdef outputGermCltSeqs(Cluster[::1] cltView, Segment[::1] segView, BamFile genomeBam, Args args)
-cpdef outputSomaCltSeqs(Cluster[::1] cltView, Segment[::1] segView, object cmdArgs, int tid)
-cpdef int outputReadAsAssm(Cluster[::1] cltView, dict allCltData, object cmdArgs, int i)
-cpdef outputRefFlank(Cluster[::1] cltView, dict allCltData, int startIdx, int taskSize, object cmdArgs)
-cpdef mergeOutput()
+cdef Args new_args(int tid, float bg_div, float bg_depth, float bg_read_len, object cmd_args)
+cdef AiList* new_ailist(str bed_fn, const char *chrom)
+cdef ouput_seg_seqs(Segment[::1] seg_view, BamFile genome_bam, Args args)
+cdef output_highfreq_clusters_seqs(Cluster[::1] clt_view, Segment[::1] seg_view, BamFile genome_bam, Args args)
+cpdef output_lowfreq_clusters_seq(Cluster[::1] clt_view, Segment[::1] seg_view, object cmd_args, int tid, int extra_thread)
+cpdef int output_read_as_assmbly(Cluster[::1] clt_view, dict cluster_data_by_tid, object cmd_args, int i)
+cpdef output_reference_flank(Cluster[::1] clt_view, dict cluster_data_by_tid, tuple block, object cmd_args)
+cpdef merge_output()

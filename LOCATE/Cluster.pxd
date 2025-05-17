@@ -1,8 +1,8 @@
 from .FileIO cimport *
 
 cdef extern from "src/cluster_utils.h" nogil:
-    void updateCluster(Cluster *cltArr, Segment *segArr, Args args)
-    void intersectBlackList(Cluster *clt, Args args)
+    void update_cluster(Cluster *clt_arr, Segment *seg_arr, Args args)
+    void intersect_black_list(Cluster *clt, Args args)
 
 
 cdef extern from "src/seg_utils.h" nogil:
@@ -10,23 +10,23 @@ cdef extern from "src/seg_utils.h" nogil:
     ### Segment records ###
     #######################
     ctypedef packed struct TeAlignment:
-        int     segIdx
-        int     AlnScore
-        int     queryStart
-        int     queryEnd
-        int     mapLen
+        int     seg_idx
+        int     aln_score
+        int     query_start
+        int     query_end
+        int     map_len
         float   divergence
     
-    int fillSegArr(bam1_t *bam, Segment *segArr, int64_t fileOffset, int minSegmentLength)
-    void updateSegment(Segment *segArr, AiList *repeatAiList, AiList *gapAiList)
-    void updateSegByTeArr(Segment *segArr, TeAlignment *teArr, int teIdx)
+    int fill_seg_arr(bam1_t *bam, Segment *seg_arr, int64_t file_offset, int minSegmentLength)
+    void update_segment(Segment *seg_arr, AiList *repeat_ailist, AiList *gap_ailist)
+    void update_seg_by_te_arr(Segment *seg_arr, TeAlignment *te_arr, int teIdx)
 
     #########################
     ### Alignment records ###
     #########################
-    void getMapLenAndDiv(int *mapLenPtr, float *divergencePtr, bam1_t *bam)
-    void fillTeArr(bam1_t *bam, TeAlignment *teArr)
+    void get_mapping_length_and_divergence(int *mapLenPtr, float *divergencePtr, bam1_t *bam)
+    void fill_te_arr(bam1_t *bam, TeAlignment *te_arr)
     
 
-cpdef dict buildCluster(float bgDiv, float bgDepth, float bgReadLen, object cmdArgs, int tid)
-cdef object getHighQualClts(dict allCltData)
+cpdef dict build_cluster(float bg_div, float bg_depth, float bg_read_len, object cmd_args, int tid, int extra_thread)
+cdef object get_high_quality_clusters(dict cluster_data_by_tid)

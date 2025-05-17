@@ -9,12 +9,12 @@ AnnoDt = np.dtype([
     ('idx',         np.int32),
     ('cltTid',      np.int32),
     ('cltIdx',      np.int32),
-    ('queryStart',  np.int32),
-    ('queryEnd',    np.int32),
+    ('query_start', np.int32),
+    ('query_end',   np.int32),
     ('strand',      np.uint8),
     ('tid',         np.int32),
-    ('refStart',    np.int32),
-    ('refEnd',      np.int32),
+    ('ref_start',   np.int32),
+    ('ref_end',     np.int32),
     ('flag',        np.uint32),
     ('extra',       np.int32),
 ])
@@ -23,44 +23,44 @@ AnnoDt = np.dtype([
 #########################
 ### Annotate Assembly ###
 #########################
-cdef annotateAssm(Cluster[::1] cltView, int startIdx, int endIdx, object cmdArgs):
+cdef annotate_assembly(Cluster[::1] clt_view, int start_idx, int end_idx, object cmd_args):
     cdef int i
-    for i in range(startIdx, endIdx):
-        mapFlankToAssm(cltView[i].tid, cltView[i].idx)
-        extractIns(&cltView[i])
-        mapAssmFlankToLocal(cltView[i].tid, cltView[i].idx)
-        if os.path.isfile("tmp_anno/{}_{}_AssmFlankToLocal.bam".format(cltView[i].tid, cltView[i].idx)) == True:
-            reExtractIns(&cltView[i])
-        mapInsToTE(cltView[i].tid, cltView[i].idx, cmdArgs)
+    for i in range(start_idx, end_idx):
+        map_flank_to_assembly(clt_view[i].tid, clt_view[i].idx)
+        extract_ins_seq(&clt_view[i])
+        map_assm_flank_to_local(clt_view[i].tid, clt_view[i].idx)
+        if os.path.isfile("tmp_anno/{}_{}_AssmFlankToLocal.bam".format(clt_view[i].tid, clt_view[i].idx)) == True:
+            re_extract_ins_seq(&clt_view[i])
+        map_ins_seq_to_te(clt_view[i].tid, clt_view[i].idx, cmd_args)
         
 
-cdef mapFlankToAssm(int tid, int idx):
-    cdef str targetFn = "tmp_assm/{}_{}_assembled.fa".format(tid, idx)
-    cdef str queryFn = "tmp_anno/{}_{}_flank.fa".format(tid, idx)
-    cdef str outFn = "tmp_anno/{}_{}_FlankToAssm.bam".format(tid, idx)
+cdef map_flank_to_assembly(int tid, int idx):
+    cdef str target_fn = "tmp_assm/{}_{}_assembled.fa".format(tid, idx)
+    cdef str query_fn = "tmp_anno/{}_{}_flank.fa".format(tid, idx)
+    cdef str output_fn = "tmp_anno/{}_{}_FlankToAssm.bam".format(tid, idx)
     cdef str cmd = "minimap2 -k11 -w5 --sr -O4,8 -n2 -m20 --secondary=no -t 1 -aY {} {} | " \
-                   "samtools view -bhS -o {} -".format(targetFn, queryFn, outFn)
+                   "samtools view -bhS -o {} -".format(target_fn, query_fn, output_fn)
     subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
 
 
-cdef mapAssmFlankToLocal(int tid, int idx):
-    cdef str targetFn = "tmp_anno/{}_{}_local.fa".format(tid, idx)
-    cdef str queryFn = "tmp_anno/{}_{}_assmFlank.fa".format(tid, idx)
-    cdef str outFn = "tmp_anno/{}_{}_AssmFlankToLocal.bam".format(tid, idx)
+cdef map_assm_flank_to_local(int tid, int idx):
+    cdef str target_fn = "tmp_anno/{}_{}_local.fa".format(tid, idx)
+    cdef str query_fn = "tmp_anno/{}_{}_assmFlank.fa".format(tid, idx)
+    cdef str output_fn = "tmp_anno/{}_{}_AssmFlankToLocal.bam".format(tid, idx)
     cdef str cmd = "minimap2 -x sr --secondary=no -t 1 -aY {} {} | " \
-                   "samtools view -bhS -o {} -".format(targetFn, queryFn, outFn)
-    if os.path.isfile(queryFn) == False:
+                   "samtools view -bhS -o {} -".format(target_fn, query_fn, output_fn)
+    if os.path.isfile(query_fn) == False:
         return
     
     subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
 
 
-cdef mapInsToTE(int tid, int idx, object cmdArgs):
-    cdef str queryFn = "tmp_anno/{}_{}_insertion.fa".format(tid, idx)
-    cdef str outFn = "tmp_anno/{}_{}_InsToTE.bam".format(tid, idx)
+cdef map_ins_seq_to_te(int tid, int idx, object cmd_args):
+    cdef str query_fn = "tmp_anno/{}_{}_insertion.fa".format(tid, idx)
+    cdef str output_fn = "tmp_anno/{}_{}_InsToTE.bam".format(tid, idx)
     cdef str cmd = "minimap2 -k11 -w5 --sr -O4,8 -n2 -m20 --secondary=no -t 1 -aY {} {} | " \
-                   "samtools view -bhS -o {} -".format(cmdArgs.teFn, queryFn, outFn)
-    if os.path.isfile(queryFn) == False:
+                   "samtools view -bhS -o {} -".format(cmd_args.te_fn, query_fn, output_fn)
+    if os.path.isfile(query_fn) == False:
         return
     
     subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
@@ -69,143 +69,143 @@ cdef mapInsToTE(int tid, int idx, object cmdArgs):
 ##########################
 ### Annotate Insertion ###
 ##########################
-cdef object getClassArr(object cmdArgs):
-    cdef int numTE = 0, maxNum = 190
-    cdef object classArr = np.zeros(200, dtype=np.uint32)
-    cdef uint32_t[::1] classView = classArr
+cdef object get_class_arr(object cmd_args):
+    cdef int size = 0, capacity = 200, threshold = int(0.9 * capacity)
+    cdef object class_arr = np.zeros(capacity, dtype=np.uint32)
+    cdef uint32_t[::1] class_view = class_arr
 
-    for l in open(cmdArgs.classFn, "r"):
+    for l in open(cmd_args.class_fn, "r"):
         l = l.strip().split()
         if len(l) < 2:
             continue
         
-        if numTE >= maxNum:
-            maxNum = classView.shape[0] + 200
-            classArr.resize((maxNum,), refcheck=False)
-            classView = classArr
-            maxNum -= 10
+        if size >= threshold:
+            capacity = int(1.5 * capacity)
+            threshold = int(0.9 * capacity)
+            class_arr.resize((capacity,), refcheck=False)
+            class_view = class_arr
         
         if l[1] == "DNA":
-            classView[numTE] = CLT_DNA
+            class_view[size] = CLT_DNA
         elif l[1] == "LTR":
-            classView[numTE] = CLT_LTR
+            class_view[size] = CLT_LTR
         elif l[1] == "LINE":
-            classView[numTE] = CLT_LINE
+            class_view[size] = CLT_LINE
         elif l[1] == "SINE":
-            classView[numTE] = CLT_SINE
+            class_view[size] = CLT_SINE
         elif l[1] == "RETROPOSON":
-            classView[numTE] = CLT_RETROPOSON
+            class_view[size] = CLT_RETROPOSON
         
-        numTE += 1
+        size += 1
     
-    classArr.resize((numTE,), refcheck=False)
-    return classArr
+    class_arr.resize((size,), refcheck=False)
+    return class_arr
 
 
-cdef object getSizeArr(object cmdArgs):
-    cdef int numTE = 0, maxNum = 190
-    cdef object sizeArr = np.zeros(200, dtype=np.int32)
-    cdef int32_t[::1] sizeView = sizeArr
-    cdef indexFn = cmdArgs.teFn + ".fai"
+cdef object get_size_arr(object cmd_args):
+    cdef int size = 0, capacity = 200, threshold = int(0.9 * capacity)
+    cdef object size_arr = np.zeros(capacity, dtype=np.int32)
+    cdef int32_t[::1] size_view = size_arr
+    cdef indexFn = cmd_args.te_fn + ".fai"
 
     for l in open(indexFn, "r"):
         l = l.strip().split()
         if len(l) < 1:
             continue
         
-        if numTE >= maxNum:
-            maxNum = sizeView.shape[0] + 200
-            sizeArr.resize((maxNum,), refcheck=False)
-            sizeView = sizeArr
-            maxNum -= 10
+        if size >= threshold:
+            capacity = int(1.5 * capacity)
+            threshold = int(0.9 * capacity)
+            size_arr.resize((capacity,), refcheck=False)
+            size_view = size_arr
         
-        sizeView[numTE] = int(l[1])
-        numTE += 1
+        size_view[size] = int(l[1])
+        size += 1
     
-    sizeArr.resize((numTE,), refcheck=False)
-    return sizeArr
+    size_arr.resize((size,), refcheck=False)
+    return size_arr
 
 
-cdef object getLtrArr():
-    cdef int numTE = 0, maxNum = 190
-    cdef object ltrArr = np.zeros(200, dtype=np.int32)
-    cdef int32_t[::1] ltrView = ltrArr
+cdef object get_ltr_arr():
+    cdef int num_te = 0, max_num = 190
+    cdef object ltr_arr = np.zeros(200, dtype=np.int32)
+    cdef int32_t[::1] ltr_view = ltr_arr
 
     for l in open("tmp_anno/ltrSize.txt", "r"):
         l = l.strip().split()
         if len(l) < 1:
             continue
         
-        if numTE >= maxNum:
-            maxNum = ltrView.shape[0] + 200
-            ltrArr.resize((maxNum,), refcheck=False)
-            ltrView = ltrArr
-            maxNum -= 10
+        if num_te >= max_num:
+            max_num = ltr_view.shape[0] + 200
+            ltr_arr.resize((max_num,), refcheck=False)
+            ltr_view = ltr_arr
+            max_num -= 10
         
-        ltrView[numTE] = int(l[0])
-        numTE += 1
+        ltr_view[num_te] = int(l[0])
+        num_te += 1
     
-    ltrArr.resize((numTE,), refcheck=False)
-    return ltrArr
+    ltr_arr.resize((num_te,), refcheck=False)
+    return ltr_arr
 
 
-cdef object annotateIns(Cluster[::1] cltView, int startIdx, int endIdx, object cmdArgs):
-    cdef int i, numTmp, numAnno = 0, maxNum = 2900
-    cdef object annoArr = np.zeros(3000, dtype=AnnoDt)
-    cdef object classArr = getClassArr(cmdArgs)
-    cdef object sizeArr = getSizeArr(cmdArgs)
-    cdef object ltrArr = getLtrArr()
-    cdef Annotation[::1] annoView = annoArr
-    cdef uint32_t[::1] classView = classArr
-    cdef int[::1] sizeView = sizeArr
-    cdef int[::1] ltrView = ltrArr
-    cdef str bamFn, assmFn
+cdef object annotate_ins_seq(Cluster[::1] clt_view, int start_idx, int end_idx, object cmd_args):
+    cdef int i, num_anno, size = 0, capacity = 3000, threshold = int(0.9 * capacity)
+    cdef object anno_arr = np.zeros(capacity, dtype=AnnoDt)
+    cdef object class_arr = get_class_arr(cmd_args)
+    cdef object size_arr = get_size_arr(cmd_args)
+    cdef object ltr_arr = get_ltr_arr()
+    cdef Annotation[::1] anno_view = anno_arr
+    cdef uint32_t[::1] class_view = class_arr
+    cdef int[::1] size_view = size_arr
+    cdef int[::1] ltr_view = ltr_arr
+    cdef str bam_fn, assembly_fn
 
-    for i in range(startIdx, endIdx):
+    for i in range(start_idx, end_idx):
         # 1. Check if cluster has assembled insSeq
-        assmFn = "tmp_assm/{}_{}_polished.fa".format(cltView[i].tid, cltView[i].idx)
-        if os.path.isfile(assmFn) != 0:
-                cltView[i].flag |= CLT_ASSEMBLED
+        assembly_fn = "tmp_assm/{}_{}_polished.fa".format(clt_view[i].tid, clt_view[i].idx)
+        if os.path.isfile(assembly_fn) != 0:
+                clt_view[i].flag |= CLT_ASSEMBLED
         
-        bamFn = "tmp_anno/{}_{}_InsToTE.bam".format(cltView[i].tid, cltView[i].idx)
-        if os.path.isfile(bamFn) == False:
+        bam_fn = "tmp_anno/{}_{}_InsToTE.bam".format(clt_view[i].tid, clt_view[i].idx)
+        if os.path.isfile(bam_fn) == False:
             continue
 
-        if numAnno >= maxNum:
-            maxNum = annoView.shape[0] + 3000
-            annoArr.resize((maxNum,), refcheck=False)
-            annoView = annoArr
-            maxNum -= 100
+        if size >= threshold:
+            capacity = int(1.5 * capacity)
+            threshold = int(0.9 * capacity)
+            anno_arr.resize((capacity,), refcheck=False)
+            anno_view = anno_arr
 
         # 2. Annotate TE fragment, polyA/T for insSeq
-        numTmp = fillAnnoArr(&cltView[i], &annoView[numAnno], &classView[0], i)
+        num_anno = fill_anno_arr(&clt_view[i], &anno_view[size], &class_view[0], i)
 
         # 3. Annotate TSD
-        mapTsdToLocal(cltView[i].tid, cltView[i].idx)
-        bamFn = "tmp_anno/{}_{}_TsdToLocal.bam".format(cltView[i].tid, cltView[i].idx)
-        if os.path.isfile(bamFn) == True:
-            annoTsd(&cltView[i], &annoView[numAnno], numTmp)
+        map_tsd_to_local(clt_view[i].tid, clt_view[i].idx)
+        bam_fn = "tmp_anno/{}_{}_TsdToLocal.bam".format(clt_view[i].tid, clt_view[i].idx)
+        if os.path.isfile(bam_fn) == True:
+            annotate_tsd(&clt_view[i], &anno_view[size], num_anno)
 
         # 4. Define insSeq structure
-        setInsStruc(&cltView[i], &annoView[numAnno], numTmp, &classView[0], &sizeView[0], &ltrView[0])
+        set_ins_structure(&clt_view[i], &anno_view[size], num_anno, &class_view[0], &size_view[0], &ltr_view[0])
 
         # 5. Perform post-filtering
-        postFilter(&cltView[i])
+        post_filter(&clt_view[i])
         
-        numAnno += numTmp
+        size += num_anno
     
-    annoArr.resize((numAnno,), refcheck=False)
-    annoArr.sort(order=['idx', 'queryStart', 'queryEnd'])
-    return annoArr
+    anno_arr.resize((size,), refcheck=False)
+    anno_arr.sort(order=['idx', 'query_start', 'query_end'])
+    return anno_arr
 
 
-cdef mapTsdToLocal(int tid, int idx):
-    cdef str targetFn = "tmp_anno/{}_{}_local.fa".format(tid, idx)
-    cdef str queryFn = "tmp_anno/{}_{}_tsd.fa".format(tid, idx)
-    cdef str outFn = "tmp_anno/{}_{}_TsdToLocal.bam".format(tid, idx)
+cdef map_tsd_to_local(int tid, int idx):
+    cdef str target_fn = "tmp_anno/{}_{}_local.fa".format(tid, idx)
+    cdef str query_fn = "tmp_anno/{}_{}_tsd.fa".format(tid, idx)
+    cdef str output_fn = "tmp_anno/{}_{}_TsdToLocal.bam".format(tid, idx)
     cdef str cmd = "minimap2 -k11 -w5 --sr -O4,8 -n2 -m20 --secondary=no -t 1 -aY {} {} | " \
-                   "samtools view -bhS -o {} -".format(targetFn, queryFn, outFn)
-    if os.path.isfile(queryFn) == False:
+                   "samtools view -bhS -o {} -".format(target_fn, query_fn, output_fn)
+    if os.path.isfile(query_fn) == False:
         return
     
     subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
@@ -214,29 +214,26 @@ cdef mapTsdToLocal(int tid, int idx):
 ###################################
 ### Annotate Insertion Sequence ###
 ###################################
-cpdef annotateCluster(Cluster[::1] cltView, int startIdx, int taskSize, object cmdArgs):
-    cdef int endIdx = startIdx + taskSize
-    if endIdx > cltView.shape[0]:
-        endIdx = cltView.shape[0]
-    
-    # 1. Define insertion seq from assembled contig(s)
-    annotateAssm(cltView, startIdx, endIdx, cmdArgs)
+cpdef annotate_cluster(Cluster[::1] clt_view, tuple block, object cmd_args):
+    # Step 1: Define insertion seq from assembled contig(s)
+    start_idx, end_idx = block
+    annotate_assembly(clt_view, start_idx, end_idx, cmd_args)
 
-    # 2. Annotate TE-fragment, PolyA/T, TSD and structure for insSeq
-    #    Also perform post-filtering
-    cdef object annoArr = annotateIns(cltView, startIdx, endIdx, cmdArgs)
+    # Step 2: Annotate TE-fragment, PolyA/T, TSD and structure for insSeq
+    #         Also perform post-filtering
+    cdef object anno_arr = annotate_ins_seq(clt_view, start_idx, end_idx, cmd_args)
     
-    # 3. Output formated cluster and annotation records
-    cdef Annotation[::1] annoView = annoArr
-    cdef bytes teFn = cmdArgs.teFn.encode()
-    cdef bytes refFn = cmdArgs.refFn.encode()
-    if (annoView.shape[0] > 0):
-        outputAnno(&annoView[0], annoView.shape[0], startIdx, teFn)
+    # Step 3: Output formated cluster and annotation records
+    cdef Annotation[::1] anno_view = anno_arr
+    cdef bytes te_fn = cmd_args.te_fn.encode()
+    cdef bytes ref_fn = cmd_args.ref_fn.encode()
+    if (anno_view.shape[0] > 0):
+        output_annotations(&anno_view[0], anno_view.shape[0], start_idx, te_fn)
     
-    if (cltView.shape[0] > 0):
-        outputClt(&cltView[0], startIdx, endIdx, refFn, teFn)
+    if (clt_view.shape[0] > 0):
+        output_clusters(&clt_view[0], start_idx, end_idx, ref_fn, te_fn)
 
-    # Output cltArr and annoArr for post-anno-filtering
-    cdef object cltArr = np.asarray(cltView)
-    annoArr.tofile('tmp_anno/{}_annoArr.dat'.format(startIdx))
-    cltArr[startIdx:endIdx].tofile('tmp_anno/{}_cltArr.dat'.format(startIdx))
+    # Output clt_arr and anno_arr for post-anno-filtering
+    cdef object clt_arr = np.asarray(clt_view)
+    anno_arr.tofile('tmp_anno/{}_annoArr.dat'.format(start_idx))
+    clt_arr[start_idx:end_idx].tofile('tmp_anno/{}_cltArr.dat'.format(start_idx))

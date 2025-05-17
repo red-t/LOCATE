@@ -14,12 +14,12 @@ typedef struct Annotation
     int         idx;
     int         cltTid;
     int         cltIdx;
-    int         queryStart;
-    int         queryEnd;
+    int         query_start;
+    int         query_end;
     uint8_t     strand;
     int         tid;
-    int         refStart;
-    int         refEnd;
+    int         ref_start;
+    int         ref_end;
     uint32_t    flag;
     int         extra;
 } __attribute__((packed)) Annotation;
@@ -46,61 +46,61 @@ typedef struct PolyA
 #define isRevAnno(anno) ((anno).strand == 1)
 
 /// @brief Find and record all TE annotations and polyA/polyT by parsing Ins-To-TE alignments
-int fillAnnoArr(Cluster *clt, Annotation *annoArr, uint32_t *classArr, int idx);
+int fill_anno_arr(Cluster *clt, Annotation *anno_arr, uint32_t *class_arr, int idx);
 
 /// @brief Find and record all polyA/polyT
-int annoPolyA(Cluster *clt, Annotation *annoArr, int numAnno, PolyA *polyA);
+int annoPolyA(Cluster *clt, Annotation *anno_arr, int num_anno, PolyA *polyA);
 
 /// @brief Find and record single polyA/polyT
-int setPolyA(char *flankSeq, Annotation *annoArr, Cluster *clt, int numAnno, PolyA *polyA);
+int setPolyA(char *flankSeq, Annotation *anno_arr, Cluster *clt, int num_anno, PolyA *polyA);
 
-/// @brief Add polyA candidate to annoArr
-void addPolyA(Annotation *annoArr, int numAnno, Cluster *clt, PolyA *polyA, int position, int length);
+/// @brief Add polyA candidate to anno_arr
+void addPolyA(Annotation *anno_arr, int num_anno, Cluster *clt, PolyA *polyA, int position, int length);
 
 /// @brief output tsd-containing-seq for tsd annotation
-void outputTsdSeq(Cluster *clt, PolyA *polyA, Annotation *annoArr, int numAnno);
+void outputTsdSeq(Cluster *clt, PolyA *polyA, Annotation *anno_arr, int num_anno);
 
 /// @brief Adjust annotation position
-void adjustAnno(Annotation *annoArr, int numAnno, int leftDelta);
+void adjustAnno(Annotation *anno_arr, int num_anno, int leftDelta);
 
 /// @brief Annotate TSD and refine breakpoint by parsing Tsd-To-Local alignments
-void annoTsd(Cluster *clt, Annotation *annoArr, int numAnno);
+void annotate_tsd(Cluster *clt, Annotation *anno_arr, int num_anno);
 
 /// @brief Find TSD and refine breakpoint
 int setTsd(Cluster *clt, int localStart, int leftEnd, int rightStart);
 
 /// @brief Set ins-seq structure based on annotations
-void setInsStruc(Cluster *clt, Annotation *annoArr, int numAnno, uint32_t *classArr, int *sizeArr, int *ltrArr);
+void set_ins_structure(Cluster *clt, Annotation *anno_arr, int num_anno, uint32_t *class_arr, int *size_arr, int *ltr_arr);
 
 /// @brief Compare function for sorting annotations
 int compare(const void *a, const void *b);
 
 /// @brief Check whether the ins-seq contains large gap
-void checkGap(Annotation *annoArr, int numAnno, Cluster *clt, int *sizeArr);
+void checkGap(Annotation *anno_arr, int num_anno, Cluster *clt, int *size_arr);
 
 /// @brief Get index of the left-most TE annotation
-int getLeftIdx(Annotation *annoArr, int numAnno);
+int getLeftIdx(Annotation *anno_arr, int num_anno);
 
 /// @brief Get index of the right-most TE annotation
-int getRightIdx(Annotation *annoArr, int numAnno);
+int getRightIdx(Annotation *anno_arr, int num_anno);
 
 /// @brief Check whether the ins-seq contains valid polyA
-void checkPolyA(Annotation *annoArr, int numAnno, Cluster *clt);
+void checkPolyA(Annotation *anno_arr, int num_anno, Cluster *clt);
 
 /// @brief Check whether the ins-seq contains complete ends
-void checkEnd(Annotation *annoArr, int numAnno, Cluster *clt);
+void checkEnd(Annotation *anno_arr, int num_anno, Cluster *clt);
 
 /// @brief Check which TE class the insertion belongs to
-void checkTEClass(Annotation *annoArr, int numAnno, Cluster *clt, uint32_t *classArr);
+void checkTEClass(Annotation *anno_arr, int num_anno, Cluster *clt, uint32_t *class_arr);
 
 /// @brief Check whether left-/right- assm-flank-seq contains valid polyT/A
-void checkFlankPolyA(Annotation *annoArr, int numAnno, Cluster *clt);
+void checkFlankPolyA(Annotation *anno_arr, int num_anno, Cluster *clt);
 
 /// @brief Search polyT/polyA in left-/right- assm-flank-seq sequence
 int searchFlankPolyA(char *flankSeq, int isA, int seqLen);
 
 /// @brief Check whether the insertion is SOLO LTR
-void checkSoloLtr(Annotation *annoArr, int numAnno, Cluster *clt, int *sizeArr, int *ltrArr);
+void checkSoloLtr(Annotation *anno_arr, int num_anno, Cluster *clt, int *size_arr, int *ltr_arr);
 
 
 /**********************
@@ -108,7 +108,7 @@ void checkSoloLtr(Annotation *annoArr, int numAnno, Cluster *clt, int *sizeArr, 
  **********************/
 
 /// @brief Output formated annotation records
-void outputAnno(Annotation *annoArr, int numAnno, int startIdx, const char *teFn);
+void output_annotations(Annotation *anno_arr, int num_anno, int start_idx, const char *te_fn);
 
 /// @brief Change single annotation record into specified format
 void formatSingleAnno(Annotation anno, char *queryTmp, char *refTmp, faidx_t *teFa, int *teTable, int *strandFlag);
