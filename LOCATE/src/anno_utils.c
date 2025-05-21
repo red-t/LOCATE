@@ -686,9 +686,9 @@ void formatSingleAnno(Annotation anno, char *queryTmp, char *refTmp, faidx_t *te
         sprintf(queryTmp, "%c:%d-%d,", strand, anno.query_start, anno.query_end);
 
     if (anno.tid == -1)
-        sprintf(refTmp, "PolyA:%d-%d,", anno.ref_start, anno.ref_end);
+        sprintf(refTmp, "PolyA,");
     else if (anno.tid == -2)
-        sprintf(refTmp, "PolyT:%d-%d,", anno.ref_start, anno.ref_end);
+        sprintf(refTmp, "PolyT,");
     else {
         sprintf(refTmp, "%s:%d-%d,", faidx_iseq(teFa, anno.tid), anno.ref_start, anno.ref_end);
         teTable[anno.tid] = 1;

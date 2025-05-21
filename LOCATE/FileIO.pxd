@@ -67,14 +67,21 @@ cdef extern from "src/cluster_utils.h" nogil:
     uint32_t CLT_TSD
     uint32_t CLT_5P_FULL
     uint32_t CLT_3P_FULL
+    uint32_t CLT_5P_UNKNOWN
+    uint32_t CLT_3P_UNKNOWN
     uint32_t CLT_SINGLE_TE
-    uint32_t CLT_LARGE_GAP
     uint32_t CLT_SELF_TO_SELF
-    uint32_t CLT_DNA
-    uint32_t CLT_LTR
     uint32_t CLT_LINE
     uint32_t CLT_SINE
     uint32_t CLT_RETROPOSON
+    uint32_t CLT_LTR
+    uint32_t CLT_DNA
+    uint32_t CLT_AT_RICH
+    uint32_t CLT_LEFT_NEAR_END
+    uint32_t CLT_RIGHT_NEAR_END
+    uint32_t CLT_SOLO_LTR
+    uint32_t CLT_SECONDARY
+    uint32_t CLT_POLYA_ONLY
 
     ##################
     ### Structures ###

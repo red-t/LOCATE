@@ -1,4 +1,5 @@
 import os
+import pandas as pd
 import logging
 import subprocess
 from collections import Counter
@@ -384,12 +385,97 @@ cpdef output_reference_flank(Cluster[::1] clt_view, dict cluster_data_by_tid, tu
 
 cpdef merge_output():
     """
-    Merge output files into a single result file.
+    Merge output files into a single result, with additional flag parsing.
     """
-    command = (
-        "cat tmp_anno/*cltFormated.txt | sort -k1,1 > tmp_anno/sorted_cltFormated.txt && "
-        "cat tmp_anno/*annoFormated.txt | sort -k1,1 > tmp_anno/sorted_annoFormated.txt && "
-        "join -1 1 -2 1 -t $'\t' -o '1.2 1.3 1.4 2.3 1.5 2.2 2.1 2.4 2.5 1.6 1.7 1.8 1.9 1.10 1.11 1.12 1.13 1.14 1.15' "
-        "tmp_anno/sorted_cltFormated.txt tmp_anno/sorted_annoFormated.txt > result.txt"
-    )
-    subprocess.run(command, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
+    clt_files = [os.path.join("tmp_anno", f) for f in os.listdir("tmp_anno") if f.endswith("cltFormated.txt")]
+    anno_files = [os.path.join("tmp_anno", f) for f in os.listdir("tmp_anno") if f.endswith("annoFormated.txt")]
+
+    # Load and merge clusters
+    clt_dfs = [pd.read_csv(f, sep="\t", header=None) for f in clt_files]
+    clt_df = pd.concat(clt_dfs, ignore_index=True)
+    clt_df.columns = [
+        "insertion_id", "chrom", "start", "end", "prob", "total_support_reads",
+        "leftclip_reads", "spanning_reads", "rightclip_reads", "assembled",
+        "tsd_seq", "insertion_seq", "left_flank_seq", "right_flank_seq", "flag"
+        ]
+    # Parse the flag field
+    parse_flag(clt_df)
+
+    # Load and merge annotations
+    anno_dfs = [pd.read_csv(f, sep="\t", header=None) for f in anno_files]
+    anno_df = pd.concat(anno_dfs, ignore_index=True)
+    anno_df.columns = ["insertion_id", "strand", "te_family", "query_region", "annotation_region"]
+
+    # Merge clt_df and anno_df
+    result_df = pd.merge(clt_df, anno_df, on="insertion_id", how="outer")
+
+    # Select necessary columns
+    result_df = result_df[[
+        "chrom", "start", "end", "te_family", "prob", "strand", "insertion_id", "query_region",
+        "annotation_region", "total_support_reads", "leftclip_reads", "spanning_reads",
+        "rightclip_reads", "assembled", "exact_end", "truncation", "te_class",
+        "pass", "has_polya", "has_tsd", "singleton", "self2self", "solo_ltr",
+        "tsd_seq", "insertion_seq", "left_flank_seq", "right_flank_seq",
+    ]]
+    
+    # Save the result to a file
+    result_df.to_csv("result.tsv", sep="\t", index=False)
+
+
+def parse_flag(df):
+    df['pass'] = (df['flag'] & CLT_PASS) != 0
+    df['assembled'] = (df['flag'] & CLT_ASSEMBLED) != 0
+    df['has_polya'] = (df['flag'] & CLT_POLYA) != 0
+    df['has_tsd'] = (df['flag'] & CLT_TSD) != 0
+    df['singleton'] = (df['flag'] & CLT_SINGLE_TE) != 0
+    df['self2self'] = (df['flag'] & CLT_SELF_TO_SELF) != 0
+    df['solo_ltr'] = (df['flag'] & CLT_SOLO_LTR) != 0
+
+    # Add exact_end column
+    def define_exact_end(flag):
+        if (flag & CLT_LEFT_FLANK_MAP) != 0:
+            return "only_left"
+        elif (flag & CLT_RIGHT_FLANK_MAP) != 0:
+            return "only_right"
+        elif (flag & (CLT_DIFF_FLANK_MAP | CLT_SAME_FLANK_MAP)) != 0:
+            return "both_end"
+        else:
+            return "unknown"
+    df['exact_end'] = df['flag'].apply(define_exact_end)
+
+    # Add truncation column
+    def define_truncation(flag):
+        if ((flag & CLT_5P_FULL) != 0) and ((flag & CLT_3P_FULL) != 0):
+            return "full"
+        elif ((flag & CLT_5P_FULL) != 0) and ((flag & CLT_3P_UNKNOWN) != 0):
+            return "3p_unknown"
+        elif ((flag & CLT_5P_FULL) != 0) and ((flag & CLT_3P_UNKNOWN) == 0):
+            return "3p_turncated"
+        elif ((flag & CLT_3P_FULL) != 0) and ((flag & CLT_5P_UNKNOWN) != 0):
+            return "5p_unknown"
+        elif ((flag & CLT_3P_FULL) != 0) and ((flag & CLT_5P_UNKNOWN) == 0):
+            return "5p_turncated"
+        elif ((flag & CLT_3P_UNKNOWN) != 0) and ((flag & CLT_5P_UNKNOWN) != 0):
+            return "5p3p_unknown"
+        elif ((flag & CLT_5P_FULL) == 0) and ((flag & CLT_3P_FULL) == 0):
+            return "5p3p_truncated"
+        else:
+            return "unknown"
+    df['truncation'] = df['flag'].apply(define_truncation)
+
+    # Add te_class column
+    def define_te_class(flag):
+        if (flag & CLT_DNA) != 0:
+            return "DNA"
+        elif (flag & CLT_LTR) != 0:
+            return "LTR"
+        elif (flag & CLT_LINE) != 0:
+            return "LINE"
+        elif (flag & CLT_SINE) != 0:
+            return "SINE"
+        elif (flag & CLT_RETROPOSON) != 0:
+            return "Retroposon"
+        else:
+            return "unknown"
+    df['te_class'] = df['flag'].apply(define_te_class)
+
