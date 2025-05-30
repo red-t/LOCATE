@@ -123,11 +123,11 @@ cdef class Iterator:
         if self.bam_record == NULL:
             raise MemoryError(f"Could not allocate memory of size {sizeof(bam1_t)}")
 
-    def __init__(self, BamFile bam_file, int tid=-1):
+    def __init__(self, BamFile bam_file, int tid=-1, int beg=0, int end=MAX_POSITION):
         self.hts_file = bam_file.hts_file
         if tid >= 0:
             with nogil:
-                self.hts_iter = sam_itr_queryi(bam_file.index, tid, 0, MAX_POSITION)
+                self.hts_iter = sam_itr_queryi(bam_file.index, tid, beg, end)
     
     def __dealloc__(self):
         if self.bam_record:
@@ -408,14 +408,14 @@ cpdef merge_output():
 
     # Merge clt_df and anno_df
     result_df = pd.merge(clt_df, anno_df, on="insertion_id", how="outer")
+    
+    # Create the "extra_info" column
+    result_df["extra_info"] = result_df.apply(generate_extra_info, axis=1)
 
     # Select necessary columns
     result_df = result_df[[
-        "chrom", "start", "end", "te_family", "prob", "strand", "insertion_id", "query_region",
-        "annotation_region", "total_support_reads", "leftclip_reads", "spanning_reads",
-        "rightclip_reads", "assembled", "exact_end", "truncation", "te_class",
-        "pass", "has_polya", "has_tsd", "singleton", "self2self", "solo_ltr",
-        "tsd_seq", "insertion_seq", "left_flank_seq", "right_flank_seq",
+        "chrom", "start", "end", "te_family", "prob", "strand", "passed_filtering", "query_region", "annotation_region",
+        "total_support_reads", "tsd_seq", "insertion_seq", "left_flank_seq", "right_flank_seq", "extra_info"
     ]]
     
     # Save the result to a file
@@ -423,7 +423,7 @@ cpdef merge_output():
 
 
 def parse_flag(df):
-    df['pass'] = (df['flag'] & CLT_PASS) != 0
+    df['passed_filtering'] = (df['flag'] & CLT_PASS) != 0
     df['assembled'] = (df['flag'] & CLT_ASSEMBLED) != 0
     df['has_polya'] = (df['flag'] & CLT_POLYA) != 0
     df['has_tsd'] = (df['flag'] & CLT_TSD) != 0
@@ -431,8 +431,8 @@ def parse_flag(df):
     df['self2self'] = (df['flag'] & CLT_SELF_TO_SELF) != 0
     df['solo_ltr'] = (df['flag'] & CLT_SOLO_LTR) != 0
 
-    # Add exact_end column
-    def define_exact_end(flag):
+    # Add reconstructed_ends column
+    def define_reconstructed_ends(flag):
         if (flag & CLT_LEFT_FLANK_MAP) != 0:
             return "only_left"
         elif (flag & CLT_RIGHT_FLANK_MAP) != 0:
@@ -441,7 +441,7 @@ def parse_flag(df):
             return "both_end"
         else:
             return "unknown"
-    df['exact_end'] = df['flag'].apply(define_exact_end)
+    df['reconstructed_ends'] = df['flag'].apply(define_reconstructed_ends)
 
     # Add truncation column
     def define_truncation(flag):
@@ -479,3 +479,23 @@ def parse_flag(df):
             return "unknown"
     df['te_class'] = df['flag'].apply(define_te_class)
 
+
+def generate_extra_info(row):
+    """
+    Generate the extra_info string for a given row.
+    """
+    return (
+        f"insID={row['insertion_id']},"
+        f"leftClipReads={row['leftclip_reads']},"
+        f"spanningReads={row['spanning_reads']},"
+        f"rightClipReads={row['rightclip_reads']},"
+        f"teClass={row['te_class']},"
+        f"assembled={row['assembled']},"
+        f"truncation={row['truncation']},"
+        f"reconstructedEnds={row['reconstructed_ends']},"
+        f"hasPolyA={row['has_polya']},"
+        f"hasTSD={row['has_tsd']},"
+        f"singleton={row['singleton']},"
+        f"self2self={row['self2self']},"
+        f"soloLTR={row['solo_ltr']}"
+    )
