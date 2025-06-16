@@ -36,15 +36,21 @@ make
 make clean
 ```
 
-## 3. Quick Start
-To call transposon insertions from long read alignments (PacBio / ONT), you can use:
+## 3. Download annotations
+LOCATE compatible `annotations/models` can be downloaded from [here](https://users.wenglab.org/boxu/LOCATE/data.html).
+
+## 4. Quick Start
+
+### 4.1 Most common way
+
+The most common way to call transposon insertions from long read alignments (PacBio / ONT), you can use:
 
 ```shell
-locate -b sorted.bam -r sorted_rmsk.bed -g sorted_gap.bed -C transposon.class -T transposon.fa -R reference.fa -H highfreq_model_dir -L lowfreq_model_dir -o output_dir
+# For example, using GRCh38 as reference
+locate -b sorted.bam -r GRCh38.rmsk.bed -g GRCh38.gap.bed -C GRCh38.transposon.class -T GRCh38.transposon.fa -R GRCh38_no_alt.fa -H GRCh38_HighFreq -L GRCh38_LowFreq -o output_path
 ```
 
 **Note:**
-- Currently, LOCATE compatible `annotations/models` for `GRCh38/Dm6` can be found [here]().
 - Currently, LOCATE requires alignment mapped by `minimap2 -Y` option, which use soft clipping for supplementary alignments, for example:
 
 ```shell
@@ -52,30 +58,34 @@ minimap2 -aYx $PRESET $REF $QUERY | samtools view -bhS - | samtools sort -o sort
 samtools index sorted.bam
 ```
 
-## 4. Output
+### 4.2 No pretrained model
 
-The tab-delimited file `${output_dir}/result.txt` stores the result of LOCATE.
+Currently, LOCATE provides pretrained models for GRCh38 and Dm6.
+If no models are available for the genome assembly or species you are working with, one alternative is to use the existing models.
+
+For example, the GRCh38 model can be used if your sequencing data was generated from an individual library, while the Dm6 model may be appropriate for data generated from a pooled library.
+
+## 5. Output
+
+The tab-delimited file `output_path/result.tsv` stores the result of LOCATE.
 
 ```shell
 Column  Value               Description
 
 1       chrom               chromosome
-2       refStart            insertion start on reference sequence (0-based, included)
-3       refEnd              insertion end on reference sequence (0-based, not-included)
-4       class               transposon class of the insertion, separated by ","
-5       predProb            predicted probability to be TP by ML models, useless
-6       orientation         orientation of the inserted transposon fragment
-7       id                  insertion id
-8       annoReg             annotated regions on the insertion sequence, follow the pattern: "{orientation}:{start}-{end}"
-9       annoInfo            annotation of each region, follow the pattern: "{Source}:{start}-{end}"
-10      numSupport          number of support reads
-11      numLeftClip         number of left-clipping support reads
-12      numSpan             number of spanning support reads
-13      numRightClip        number of right-clipping support reads
-14      isAssembled         a flag indicating whether the sequence is "assembled (1)" or "one of the support reads (0)"
-15      tsdSeq              annotated TSD sequence, from reference genome ("ref:refStart-refEnd". "." if no annotated tsd)
-16      insSeq              annotated insertion sequence, from the assembled result
-17      upSeq               upstream sequence on the left of insSeq, from the assembled result (has the same orientation as reference)
-18      downSeq             downstream sequence on the right of insSeq, from the assembled result (has the same orientation as reference)
-19      flag                bitwise flag (refer to "LOCATE/src/cluster_utils.h#L16-L41")
+2       start               insertion start site on reference sequence (0-based, included)
+3       end                 insertion end site on reference sequence (0-based, not-included)
+4       family              transposon family of the insertion, separated by ","
+5       frequency           insertion frequency.
+6       strand              orientation of the inserted transposon fragment
+7       genotype            genotype determined by the frequency (0/0, 0/1, 1/1)
+8       passed              whether this insertion pass the post-filtering (True/False)
+9       query_region        annotated regions on the insertion sequence, follow the pattern: "{+/-}:{start}-{end}"
+10      target_region       target regions of each query region, follow the pattern: "{source}:{start}-{end}"
+11      total_support       total support reads of the insertion
+12      tsd_seq             annotated TSD sequence (corresponding to "chrom:start-end". "." if no annotated tsd)
+16      insertion_seq       annotated insertion sequence, from the assembled sequence
+17      upstream_seq        upstream sequence of the insertion sequence, from the assembled sequence (has the same orientation as the reference)
+18      downstream_seq      downstream sequence of the insertion sequence, from the assembled sequence (has the same orientation as the reference)
+19      extra_info          extra information
 ```

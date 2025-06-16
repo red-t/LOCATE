@@ -456,10 +456,10 @@ void output_clusters(Cluster *clt_arr, int start_idx, int end_idx, const char *r
         tsdSeq = fetchTsdSeq(refFa, clt);
         fetchSeqs(clt, &insSeq, &leftSeq, &rightSeq);
 
-        fprintf(fp, "%d-%d\t%s\t%d\t%d\t%f\t%d\t%d\t%d\t%d\t%d\t%s\t%s\t%s\t%s\t%d\n",
+        fprintf(fp, "%d-%d\t%s\t%d\t%d\t%f\t%d\t%d\t%d\t%d\t%d\t%s\t%s\t%s\t%s\t%d\t%f\n",
                 clt->tid, clt->idx, faidx_iseq(refFa, clt->tid), clt->ref_start, clt->ref_end,
                 clt->probability, clt->numSegRaw, clt->numLeft, clt->numMiddle, clt->numRight,
-                isAssembled, tsdSeq, insSeq, leftSeq, rightSeq, clt->flag);
+                isAssembled, tsdSeq, insSeq, leftSeq, rightSeq, clt->flag, clt->frequency);
 
         free(tsdSeq); free(insSeq); free(leftSeq); free(rightSeq);
     }

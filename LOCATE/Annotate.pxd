@@ -41,4 +41,4 @@ cdef extern from "src/post_filter.h":
     ###################
     void post_filter(Cluster *clt)
 
-cpdef annotate_cluster(Cluster[::1] clt_view, tuple block, object cmd_args)
+cpdef annotate_cluster(Cluster[::1] clt_view, tuple block, dict cluster_data_by_tid, object cmd_args, int extra_thread)

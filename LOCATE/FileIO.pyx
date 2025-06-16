@@ -394,9 +394,9 @@ cpdef merge_output():
     clt_dfs = [pd.read_csv(f, sep="\t", header=None) for f in clt_files]
     clt_df = pd.concat(clt_dfs, ignore_index=True)
     clt_df.columns = [
-        "insertion_id", "chrom", "start", "end", "prob", "total_support_reads",
+        "insertion_id", "chrom", "start", "end", "prob", "total_support",
         "leftclip_reads", "spanning_reads", "rightclip_reads", "assembled",
-        "tsd_seq", "insertion_seq", "left_flank_seq", "right_flank_seq", "flag"
+        "tsd_seq", "insertion_seq", "upstream_seq", "downstream_seq", "flag", "frequency"
         ]
     # Parse the flag field
     parse_flag(clt_df)
@@ -404,7 +404,7 @@ cpdef merge_output():
     # Load and merge annotations
     anno_dfs = [pd.read_csv(f, sep="\t", header=None) for f in anno_files]
     anno_df = pd.concat(anno_dfs, ignore_index=True)
-    anno_df.columns = ["insertion_id", "strand", "te_family", "query_region", "annotation_region"]
+    anno_df.columns = ["insertion_id", "strand", "family", "query_region", "target_region"]
 
     # Merge clt_df and anno_df
     result_df = pd.merge(clt_df, anno_df, on="insertion_id", how="outer")
@@ -414,8 +414,8 @@ cpdef merge_output():
 
     # Select necessary columns
     result_df = result_df[[
-        "chrom", "start", "end", "te_family", "prob", "strand", "passed_filtering", "query_region", "annotation_region",
-        "total_support_reads", "tsd_seq", "insertion_seq", "left_flank_seq", "right_flank_seq", "extra_info"
+        "chrom", "start", "end", "family", "frequency", "strand", "genotype", "passed", "query_region",
+        "target_region", "total_support", "tsd_seq", "insertion_seq", "upstream_seq", "downstream_seq", "extra_info"
     ]]
     
     # Save the result to a file
@@ -423,7 +423,7 @@ cpdef merge_output():
 
 
 def parse_flag(df):
-    df['passed_filtering'] = (df['flag'] & CLT_PASS) != 0
+    df['passed'] = (df['flag'] & CLT_PASS) != 0
     df['assembled'] = (df['flag'] & CLT_ASSEMBLED) != 0
     df['has_polya'] = (df['flag'] & CLT_POLYA) != 0
     df['has_tsd'] = (df['flag'] & CLT_TSD) != 0
@@ -478,6 +478,16 @@ def parse_flag(df):
         else:
             return "unknown"
     df['te_class'] = df['flag'].apply(define_te_class)
+
+    # Add genotype column
+    def define_genotype(frequency):
+        if frequency < 0.2:
+            return "0/0"
+        elif frequency >= 0.8::
+            return "1/1"
+        else:
+            return "0/1"
+    df['genotype'] = df['frequency'].apply(define_genotype)
 
 
 def generate_extra_info(row):

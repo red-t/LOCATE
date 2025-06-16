@@ -211,10 +211,59 @@ cdef map_tsd_to_local(int tid, int idx):
     subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
 
 
+##########################
+### Genotype Insertion ###
+##########################
+cdef object compute_frequency(Cluster[::1] clt_view, tuple block, dict cluster_data_by_tid, object cmd_args, int extra_thread):
+    cdef BamFile genome_bam = BamFile(cmd_args.genome_bam_fn, "rb", 1 + extra_thread)
+    cdef Iterator iterator
+    cdef Segment[::1] seg_view
+
+    # Step 1: Process each clusters
+    cdef i, j, beg, end, num_ref, return_value, start_idx, end_idx
+    start_idx, end_idx = block
+    for i in range(start_idx, end_idx):
+        # Collect offsets of each support reads
+        seg_view = cluster_data_by_tid[clt_view[i].tid][1]
+        alt_offsets = set()
+        for j in range(clt_view[i].start_idx, clt_view[i].end_idx):
+            if overhang_too_short(&seg_view[j], cmd_args.overhang):
+                continue
+            alt_offsets.add(seg_view[j].file_offset)
+
+        # Step 2: Initialize iterator for the corresponding region
+        iterator = Iterator(genome_bam, clt_view[i].tid, clt_view[i].ref_start - 50000, clt_view[i].ref_start + 50000)
+
+        # Step 3: Count ref_support reads
+        try:
+            num_ref = 0
+            beg = clt_view[i].ref_start - 75
+            end = clt_view[i].ref_start + 75
+            while True:
+                return_value = iterator.next_record_by_tid()
+                if return_value < 0:
+                    break
+                if bam_is_invalid(iterator.bam_record):
+                    continue
+                if iterator.offset in alt_offsets:
+                    continue
+                elif (iterator.bam_record.core.pos < beg) and (bam_endpos(iterator.bam_record) > end):
+                    num_ref += 1
+        finally:
+            del iterator
+
+        # Step 4: Compute frequency
+        clt_view[i].frequency = float(clt_view[i].numLeft + clt_view[i].numRight + 2*clt_view[i].numMiddle) / (clt_view[i].numLeft + clt_view[i].numRight + 2*clt_view[i].numMiddle + 2*num_ref)
+        
+    genome_bam.close()
+
+
+
+
 ###################################
 ### Annotate Insertion Sequence ###
 ###################################
-cpdef annotate_cluster(Cluster[::1] clt_view, tuple block, object cmd_args):
+cpdef annotate_cluster(Cluster[::1] clt_view, tuple block, dict cluster_data_by_tid, object cmd_args, int extra_thread):
     # Step 1: Define insertion seq from assembled contig(s)
     start_idx, end_idx = block
     annotate_assembly(clt_view, start_idx, end_idx, cmd_args)
@@ -222,6 +271,9 @@ cpdef annotate_cluster(Cluster[::1] clt_view, tuple block, object cmd_args):
     # Step 2: Annotate TE-fragment, PolyA/T, TSD and structure for insSeq
     #         Also perform post-filtering
     cdef object anno_arr = annotate_ins_seq(clt_view, start_idx, end_idx, cmd_args)
+
+    # Step 3: Genotype clusters
+    compute_frequency(clt_view, block, cluster_data_by_tid, cmd_args, extra_thread)
     
     # Step 3: Output formated cluster and annotation records
     cdef Annotation[::1] anno_view = anno_arr
@@ -232,8 +284,4 @@ cpdef annotate_cluster(Cluster[::1] clt_view, tuple block, object cmd_args):
     
     if (clt_view.shape[0] > 0):
         output_clusters(&clt_view[0], start_idx, end_idx, ref_fn, te_fn)
-
-    # Output clt_arr and anno_arr for post-anno-filtering
-    cdef object clt_arr = np.asarray(clt_view)
-    anno_arr.tofile('tmp_anno/{}_annoArr.dat'.format(start_idx))
-    clt_arr[start_idx:end_idx].tofile('tmp_anno/{}_cltArr.dat'.format(start_idx))
+    

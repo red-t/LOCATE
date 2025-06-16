@@ -160,6 +160,7 @@ typedef struct Cluster
     int         rightMost;
     int         insLen;
     int         repTid;
+    float       frequency;
 } __attribute__((packed)) Cluster;
 
 /// @brief Data container for arguments

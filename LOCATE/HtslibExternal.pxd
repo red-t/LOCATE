@@ -234,6 +234,7 @@ cdef extern from "htslib/sam.h" nogil:
     char *bam_get_seq(bam1_t *b)
     uint8_t *bam_get_qual(bam1_t *b)
     char bam_seqi(char *s, int i)
+    int32_t bam_endpos(const bam1_t *b)
 
     #**************************
     #*** Exported functions ***

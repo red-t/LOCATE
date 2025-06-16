@@ -127,6 +127,7 @@ cdef extern from "src/cluster_utils.h" nogil:
         int         rightMost
         int         insLen
         int         repTid
+        float       frequency
     
     ctypedef struct Args:
         int         num_thread

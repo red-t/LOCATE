@@ -104,7 +104,7 @@ cpdef object run_in_parallel(object cmd_args):
         output_sequences(executor, cmd_args, cluster_data_by_tid, high_quality_clusters, num_chromosomes, max_workers)
 
         # 8. Annotate Clusters
-        annotate_clusters(executor, cmd_args, high_quality_clusters, max_workers)
+        annotate_clusters(executor, cmd_args, cluster_data_by_tid, high_quality_clusters, max_workers)
 
     # 9. Merge Output
     merge_output()
@@ -305,7 +305,7 @@ def output_sequences(executor, cmd_args, cluster_data_by_tid, high_quality_clust
         subprocess.result()
 
 
-def annotate_clusters(executor, cmd_args, high_quality_clusters, max_workers):
+def annotate_clusters(executor, cmd_args, cluster_data_by_tid, high_quality_clusters, max_workers):
     """
     Output results for clusters and high-quality clusters.
 
@@ -316,9 +316,13 @@ def annotate_clusters(executor, cmd_args, high_quality_clusters, max_workers):
         max_workers (int): Maximum number of workers.
     """
     task_blocks = divide_tasks(high_quality_clusters.shape[0], max_workers)
-    subprocess_tuple = set([executor.submit(
-        annotate_cluster, high_quality_clusters, block, cmd_args
-    ) for block in task_blocks])
+    thread_allocation = allocate_threads(cmd_args.num_thread - max_workers, len(task_blocks))
+
+    subprocess_tuple = set()
+    for block, extra_thread in zip(task_blocks, thread_allocation):
+        subprocess_tuple.add(executor.submit(
+            annotate_cluster, high_quality_clusters, block, cluster_data_by_tid, cmd_args, extra_thread
+        ))
 
     for subprocess in as_completed(subprocess_tuple):
         subprocess.result()

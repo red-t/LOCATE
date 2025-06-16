@@ -81,6 +81,7 @@ ClusterDt = np.dtype([
     ('rightMost',           np.int32),
     ('insLen',              np.int32),
     ('repTid',              np.int32),
+    ('frequency',           np.float32),
 ])
 
 
@@ -351,9 +352,8 @@ cpdef dict build_cluster(float bg_div, float bg_depth, float bg_read_len, object
     """
 
     # Step 1: Construct segments
-    cmd_args.num_thread = 1 + extra_thread
     cdef Args args = new_args(tid, bg_div, bg_depth, bg_read_len, cmd_args)
-    cdef BamFile genome_bam = BamFile(cmd_args.genome_bam_fn, "rb", cmd_args.num_thread)
+    cdef BamFile genome_bam = BamFile(cmd_args.genome_bam_fn, "rb", 1 + extra_thread)
     cdef object seg_arr = get_seg_arr(genome_bam, args)
 
     # Step 2: Compute segment features
