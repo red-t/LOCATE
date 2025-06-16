@@ -483,7 +483,7 @@ def parse_flag(df):
     def define_genotype(frequency):
         if frequency < 0.2:
             return "0/0"
-        elif frequency >= 0.8::
+        elif frequency >= 0.8:
             return "1/1"
         else:
             return "0/1"
