@@ -84,8 +84,8 @@ Column  Value               Description
 10      target_region       target regions of each query region, follow the pattern: "{source}:{start}-{end}"
 11      total_support       total support reads of the insertion
 12      tsd_seq             annotated TSD sequence (corresponding to "chrom:start-end". "." if no annotated tsd)
-16      insertion_seq       annotated insertion sequence, from the assembled sequence
-17      upstream_seq        upstream sequence of the insertion sequence, from the assembled sequence (has the same orientation as the reference)
-18      downstream_seq      downstream sequence of the insertion sequence, from the assembled sequence (has the same orientation as the reference)
-19      extra_info          extra information
+13      insertion_seq       annotated insertion sequence, from the assembled sequence
+14      upstream_seq        upstream sequence of the insertion sequence, from the assembled sequence (has the same orientation as the reference)
+15      downstream_seq      downstream sequence of the insertion sequence, from the assembled sequence (has the same orientation as the reference)
+16      extra_info          extra information
 ```
