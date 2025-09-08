@@ -9,7 +9,7 @@
 /****************************
  *** Segment Sequence IO  ***
  ****************************/
-#define is_lowqual_clt(clt) (((clt)->isInBlacklist) || ((clt)->probability <= 0.5))
+#define isLowQualClt(clt) (((clt)->isInBlacklist) || ((clt)->probability <= 0.5) || ((clt)->numSeg >= 20))
 #define is_lowfreq_clt(clt) ((clt)->cltType != 0)
 
 /// @brief select a segment to output from cluster
