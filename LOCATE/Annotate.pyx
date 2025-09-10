@@ -275,7 +275,7 @@ cpdef annotate_cluster(Cluster[::1] clt_view, tuple block, dict cluster_data_by_
     # Step 3: Genotype clusters
     compute_frequency(clt_view, block, cluster_data_by_tid, cmd_args, extra_thread)
     
-    # Step 3: Output formated cluster and annotation records
+    # Step 4: Output formated cluster and annotation records
     cdef Annotation[::1] anno_view = anno_arr
     cdef bytes te_fn = cmd_args.te_fn.encode()
     cdef bytes ref_fn = cmd_args.ref_fn.encode()

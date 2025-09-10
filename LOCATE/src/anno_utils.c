@@ -648,8 +648,8 @@ void output_annotations(Annotation *anno_arr, int num_anno, int start_idx, const
     int *teTable = malloc(numTe * sizeof(int));
     memset(teTable, 0, numTe * sizeof(int));
 
-    char queryTmp[100] = {'\0'}, refTmp[100] = {'\0'};
-    char queryStr[1000] = {'\0'}, refStr[1000] = {'\0'};
+    char queryTmp[500] = {'\0'}, refTmp[500] = {'\0'};
+    char queryStr[100000] = {'\0'}, refStr[100000] = {'\0'};
     char output_fn[100] = {'\0'};
     sprintf(output_fn, "tmp_anno/%d_annoFormated.txt", start_idx);
     FILE *fp = fopen(output_fn, "w");
@@ -661,8 +661,8 @@ void output_annotations(Annotation *anno_arr, int num_anno, int start_idx, const
             prevIdx = anno_arr[i].idx;
             strandFlag = 0;
             memset(teTable, 0, numTe * sizeof(int));
-            memset(queryStr, '\0', 1000);
-            memset(refStr, '\0', 1000);
+            memset(queryStr, '\0', 100000);
+            memset(refStr, '\0', 100000);
         }
         formatSingleAnno(anno_arr[i], queryTmp, refTmp, teFa, teTable, &strandFlag);
         strcat(queryStr, queryTmp);
