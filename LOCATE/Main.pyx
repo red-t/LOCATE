@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('-o', '--outpath', dest='out_path', type=str, default='./',
                         help='Output directory')
     parser.add_argument('-t', '--num_thread', dest='num_thread', type=int, default=1,
-                        help='Max number of extra threads to use in each sub-process')
+                        help='Max number of threads to use')
     parser.add_argument('-l', '--min_seg_len', dest='min_seg_len', type=int, default=100,
                         help='Min segment length, reads with clip-/insert-segment < min_seg_len will be ignored')
     parser.add_argument('-d', '--max_dist', dest='max_dist', type=int, default=50,

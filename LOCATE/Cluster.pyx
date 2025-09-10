@@ -353,6 +353,7 @@ cpdef dict build_cluster(float bg_div, float bg_depth, float bg_read_len, object
 
     # Step 1: Construct segments
     cdef Args args = new_args(tid, bg_div, bg_depth, bg_read_len, cmd_args)
+    args.num_thread = 1 + extra_thread
     cdef BamFile genome_bam = BamFile(cmd_args.genome_bam_fn, "rb", 1 + extra_thread)
     cdef object seg_arr = get_seg_arr(genome_bam, args)
 
