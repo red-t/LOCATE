@@ -66,7 +66,9 @@ cpdef assemble_cluster(Cluster[::1] clt_view, dict cluster_data_by_tid, tuple bl
                 break
         
         if (not os.path.isfile(f"{prefix}_assm.fa")) or (os.path.getsize(f"{prefix}_assm.fa") == 0):
-            if output_read_as_assmbly(clt_view, cluster_data_by_tid, cmd_args, i) == 0:
+            output_fn = f"{prefix}_assm.fa"
+            print("[Warning] wtdbg2 failed for cluster {}_{}. Try to select one read as assembly.".format(clt_view[i].tid, clt_view[i].idx))
+            if output_read_as_assmbly(clt_view, cluster_data_by_tid, cmd_args, i, output_fn) == 0:
                 continue
 
         # Step 2: First round polishing
@@ -74,10 +76,22 @@ cpdef assemble_cluster(Cluster[::1] clt_view, dict cluster_data_by_tid, tuple bl
             "samtools consensus --ff 3332 -m simple -c 0 -d 1 -H 0.9 {0}_RawToAssm.bam -o {0}_assembled.fa".format(prefix)
         subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
 
+        if (not os.path.isfile(f"{prefix}_assembled.fa")) or (os.path.getsize(f"{prefix}_assembled.fa") == 0):
+            output_fn = f"{prefix}_assembled.fa"
+            print("[Warning] First round polishing failed for cluster {}_{}. Try to select one read as polished sequence.".format(clt_view[i].tid, clt_view[i].idx))
+            if output_read_as_assmbly(clt_view, cluster_data_by_tid, cmd_args, i, output_fn) != 0:
+                continue
+
         # Step 3: Second round polishing
         cmd = "minimap2 -aY {0}_assembled.fa {0}.fa | samtools sort | samtools view -bhS -F 3332 -o {0}_RawToAssm.bam && " \
             "samtools consensus --ff 3332 -m simple -c 0 -d 1 -H 0.9 {0}_RawToAssm.bam -o {0}_assembled.fa".format(prefix)
         subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
+
+        if (not os.path.isfile(f"{prefix}_assembled.fa")) or (os.path.getsize(f"{prefix}_assembled.fa") == 0):
+            output_fn = f"{prefix}_assembled.fa"
+            print("[Warning] Second round polishing failed for cluster {}_{}. Try to select one read as polished sequence.".format(clt_view[i].tid, clt_view[i].idx))
+            if output_read_as_assmbly(clt_view, cluster_data_by_tid, cmd_args, i, output_fn) != 0:
+                continue
 
         # Step 4: Recalibration
         recalibration(prefix, cmd_args)

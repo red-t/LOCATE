@@ -307,7 +307,8 @@ cpdef output_lowfreq_clusters_seq(Cluster[::1] clt_view, Segment[::1] seg_view, 
         del genome_bam
 
 
-cpdef int output_read_as_assmbly(Cluster[::1] clt_view, dict cluster_data_by_tid, object cmd_args, int i):
+# cpdef int output_read_as_assmbly(Cluster[::1] clt_view, dict cluster_data_by_tid, object cmd_args, int i):
+cpdef int output_read_as_assmbly(Cluster[::1] clt_view, dict cluster_data_by_tid, object cmd_args, int i, str output_fn):
     """
     Output one segment sequence as assembly for high-frequency cluster that failed to be assembled.
     """
@@ -318,7 +319,7 @@ cpdef int output_read_as_assmbly(Cluster[::1] clt_view, dict cluster_data_by_tid
     cdef BamFile genome_bam = BamFile(cmd_args.genome_bam_fn, "rb", cmd_args.num_thread)
     cdef Iterator iterator = Iterator(genome_bam, clt_view[i].tid)
     cdef bam1_t *dest_record = bam_init1()
-    cdef str output_fn = "tmp_assm/{}_{}_assm.fa".format(clt_view[i].tid, clt_view[i].idx)
+    # cdef str output_fn = "tmp_assm/{}_{}_assm.fa".format(clt_view[i].tid, clt_view[i].idx)
     cdef BamFile output_fa = BamFile(output_fn, "wF", cmd_args.num_thread, genome_bam)
     cdef Args args
 
