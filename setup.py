@@ -19,6 +19,9 @@ extensions = [
 
 setup(
     name="LOCATE",
+    install_requires=[
+        "setuptools<70",
+    ],
     ext_modules=cythonize(extensions, language_level=3),
     entry_points={
         'console_scripts': [

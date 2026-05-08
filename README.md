@@ -19,7 +19,7 @@ Or, you can install from source code.
 ### 2.1 Preparing dependencies
 
 ```shell
-mamba create -n locate python=3.10.13 cython=3.0.6 scikit-learn=1.3.2 autogluon=1.0.0 samtools=1.21 minimap2=2.28 wtdbg=2.5
+mamba create -n locate python=3.10.13 cython=3.0.6 scikit-learn=1.3.2 autogluon=1.0.0 samtools=1.21 minimap2=2.28 wtdbg=2.5 "setuptools<70"
 mamba activate locate
 ```
 ### 2.2 Clone the repository
