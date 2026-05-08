@@ -305,11 +305,9 @@ cdef filter_by_blacklist(Cluster[::1] clt_view, Args args):
 
 cdef object filter_by_model(object clt_arr, object cmd_args):
     cdef object clt_df = pd.DataFrame(clt_arr)
-    try:
-        filter_high_freq_clusters(clt_df, cmd_args.high_freq_model)
-        filter_low_freq_clusters(clt_df, cmd_args.low_freq_model)
-    finally:
-        return clt_df.to_records(index=False)
+    filter_high_freq_clusters(clt_df, cmd_args.high_freq_model)
+    filter_low_freq_clusters(clt_df, cmd_args.low_freq_model)
+    return clt_df.to_records(index=False)
 
 
 cdef filter_high_freq_clusters(object clt_df, str modelPath):
