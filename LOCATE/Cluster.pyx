@@ -114,10 +114,7 @@ cdef object get_seg_arr(BamFile genome_bam, Args args):
             if bam_is_invalid(iterator.bam_record):
                 continue
 
-            if size >= threshold:
-                capacity = int(1.5 * capacity)
-                threshold = int(capacity * 0.9)
-                seg_arr.resize((capacity,), refcheck=False)
+            if _resize_if_needed(seg_arr, size, &capacity, &threshold):
                 seg_view = seg_arr
 
             return_value = fill_seg_arr(iterator.bam_record, &seg_view[size], iterator.offset, args.min_seg_len)
@@ -169,7 +166,10 @@ cdef update_seg_arr_by_te(Segment[::1] seg_view, Args args):
 cdef map_seg_to_te(str te_fn, Args args):
     cdef str cmd = "minimap2 -k11 -w5 --sr -O4,8 -n2 -m20 --secondary=no -t {0} -aY {1} tmp_build/all_seg_{2}.fa | " \
                    "samtools view -@ {0} -bhS -o tmp_build/all_seg_{2}.bam -".format(args.num_thread, te_fn, args.tid)
-    subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
+    try:
+        subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash', check=True)
+    except subprocess.CalledProcessError:
+        pass
 
 
 cdef object get_te_arr(Iterator iterator):
@@ -195,10 +195,7 @@ cdef object get_te_arr(Iterator iterator):
             if bam_is_invalid(iterator.bam_record):
                 continue
 
-            if size >= threshold:
-                capacity = int(capacity * 1.5)
-                threshold = int(capacity * 0.9)
-                te_arr.resize((capacity,), refcheck=False)
+            if _resize_if_needed(te_arr, size, &capacity, &threshold):
                 te_view = te_arr
 
             fill_te_arr(iterator.bam_record, &te_view[size])
@@ -231,10 +228,7 @@ cdef object get_clt_arr(Segment[::1] seg_view, Args args):
             start_idx += 1
             continue
 
-        if size >= threshold:
-            capacity = int(capacity * 1.5)
-            threshold = int(capacity * 0.9)
-            clt_arr.resize((capacity,), refcheck=False)
+        if _resize_if_needed(clt_arr, size, &capacity, &threshold):
             clt_view = clt_arr
 
         # Initialize current cluster
@@ -362,7 +356,7 @@ cpdef dict build_cluster(float bg_div, float bg_depth, float bg_read_len, object
 
     update_seg_arr(seg_arr, args)
     seg_arr.sort(order='ref_position')
-    ouput_seg_seqs(seg_arr, genome_bam, args)
+    output_seg_seqs(seg_arr, genome_bam, args)
 
     map_seg_to_te(cmd_args.te_fn, args)
     update_seg_arr_by_te(seg_arr, args)
@@ -419,10 +413,7 @@ cdef object get_high_quality_clusters(dict cluster_data_by_tid):
                 continue
 
             # Resize array if needed
-            if size >= threshold:
-                capacity = int(capacity * 1.5)
-                threshold = int(capacity * 0.9)
-                high_quality_arr.resize((capacity,), refcheck=False)
+            if _resize_if_needed(high_quality_arr, size, &capacity, &threshold):
                 high_quality_view = high_quality_arr
 
             # Add high-quality cluster to the array

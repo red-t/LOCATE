@@ -147,9 +147,9 @@ uint8_t getPointLocationType(AiList *repeat_ailist, AiList *gap_ailist, int poin
     ailistQueryPoint(repeat_ailist, point, 50, &numOverlap, &minDistanceToOverlap);
     ailistQueryPoint(gap_ailist, point, 50, &numOverlap, &minDistanceToOverlap);
 
-    if (numOverlap == 0) return 1;
-    if (minDistanceToOverlap < 50) return 2;
-    return 4;
+    if (numOverlap == 0) return LOCATION_NORMAL;
+    if (minDistanceToOverlap < FLANK_SIZE_50) return LOCATION_BOUNDARY;
+    return LOCATION_INSIDE;
 }
 
 /// @brief Get location type of a alignment
@@ -159,15 +159,15 @@ uint8_t getAlnLocationType(uint8_t startLocationType, uint8_t endLocationType)
     {
         case 1:
         case 5:
-            return 1;   // at least one side inside normal region
+            return LOCATION_NORMAL; // at least one side inside normal region
         case 4:
-            return 2;   // both ends inside repeat/gap region
+            return LOCATION_BOUNDARY; // both ends inside repeat/gap region
         case 2:
-            return 4;   // both ends at repeat/gap boundary
+            return LOCATION_INSIDE; // both ends at repeat/gap boundary
         case 3:
-            return 8;   // one side at repeat/gap boundary, the other inside normal region
+            return LOCATION_ONE_BOUNDARY; // one side at repeat/gap boundary, the other inside normal region
         case 6:
-            return 16;  // one side at repeat/gap boundary, the other inside repeat/gap
+            return LOCATION_ONE_INSIDE; // one side at repeat/gap boundary, the other inside repeat/gap
         default:
             return 0;
     }

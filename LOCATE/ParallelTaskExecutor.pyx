@@ -162,11 +162,7 @@ cdef dict get_background_info(str genome_bam_fn, int num_thread):
         if bam_is_invalid(iterator.bam_record):
             continue
 
-        if size >= threshold:
-            # Dynamically resize arrays
-            capacity = int(capacity * 1.5)
-            threshold = int(0.9 * capacity)
-            divergence_array.resize((capacity,), refcheck=False)
+        if _resize_if_needed(divergence_array, size, &capacity, &threshold):
             read_length_array.resize((capacity,), refcheck=False)
             divergence_view = divergence_array
             read_length_view = read_length_array

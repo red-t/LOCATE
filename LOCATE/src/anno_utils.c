@@ -54,7 +54,7 @@ void initAnno(bam1_t *bam, sam_hdr_t *header, Cluster *clt, Annotation *anno, in
     }
 
     int teLen = sam_hdr_tid2len(header, anno->tid);
-    int truncSize = (((float)teLen * 0.08) < 100) ? (teLen * 0.08) : 100;
+    int truncSize = (((float)teLen * TRUNC_PROPORTION) < TRUNC_MIN_THRESHOLD) ? (teLen * TRUNC_PROPORTION) : TRUNC_MIN_THRESHOLD;
     if (anno->ref_start < truncSize)
         anno->flag |= CLT_5P_FULL;
     if ((teLen - anno->ref_end) < truncSize)
@@ -70,8 +70,11 @@ int fill_anno_arr(Cluster *clt, Annotation *anno_arr, uint32_t *class_arr, int i
     char input_fn[100] = {'\0'};
     sprintf(input_fn, "tmp_anno/%d_%d_InsToTE.bam", clt->tid, clt->idx);
     htsFile *input_bam = sam_open(input_fn, "rb");
+    if (!input_bam) { fprintf(stderr, "Error: Cannot open %s\n", input_fn); return 0; }
     sam_hdr_t *header = sam_hdr_read(input_bam);
+    if (!header) { sam_close(input_bam); fprintf(stderr, "Error: Cannot read header from %s\n", input_fn); return 0; }
     bam1_t *bam = bam_init1();
+    if (!bam) { sam_hdr_destroy(header); sam_close(input_bam); return 0; }
 
     int num_anno = 0;
     PolyA polyA = initPolyA(idx);
@@ -122,7 +125,7 @@ int annoPolyA(Cluster *clt, Annotation *anno_arr, int num_anno, PolyA *polyA)
     char *flankSeq = NULL;
     hts_pos_t seqLen;
 
-    if (polyA->leftAnnoStart >= 5) {
+    if (polyA->leftAnnoStart >= MIN_POLYA_LEN) {
         flankSeq = faidx_fetch_seq64(insFa, insID, 0, polyA->leftAnnoStart-1, &seqLen);
         polyA->isA = 0;
         polyA->seqLen = seqLen;
@@ -130,7 +133,7 @@ int annoPolyA(Cluster *clt, Annotation *anno_arr, int num_anno, PolyA *polyA)
     }
 
     clt->insLen = faidx_seq_len64(insFa, insID);
-    if ((clt->insLen - polyA->rightAnnoEnd) >= 5) {
+    if ((clt->insLen - polyA->rightAnnoEnd) >= MIN_POLYA_LEN) {
         flankSeq = faidx_fetch_seq64(insFa, insID, polyA->rightAnnoEnd, clt->insLen-1, &seqLen);
         polyA->isA = 1;
         polyA->seqLen = seqLen;
@@ -181,9 +184,9 @@ int setPolyA(char *flankSeq, Annotation *anno_arr, Cluster *clt, int num_anno, P
         }
 
         // Search from the new start
-        if (thisSum < 0 || numOther > 10) {
-            double fdr = (polyA->seqLen - max_len + 1) * pow(0.25, max_len);
-            if (max_len < 5 || fdr > 0.01)
+        if (thisSum < 0 || numOther > POLYA_NUM_OTHER_MAX) {
+            double fdr = (polyA->seqLen - max_len + 1) * pow(POLYA_BASE_PROB, max_len);
+            if (max_len < MIN_POLYA_LEN || fdr > POLYA_FDR_THRESHOLD)
                 goto RESET;
 
             addPolyA(anno_arr, num_anno++, clt, polyA, position, max_len);
@@ -196,8 +199,8 @@ int setPolyA(char *flankSeq, Annotation *anno_arr, Cluster *clt, int num_anno, P
     }
 
     // The final polyA candiadte
-    double fdr = (polyA->seqLen - max_len + 1) * pow(0.25, max_len);
-    if (max_len >= 5 && fdr <= 0.01)
+    double fdr = (polyA->seqLen - max_len + 1) * pow(POLYA_BASE_PROB, max_len);
+    if (max_len >= MIN_POLYA_LEN && fdr <= POLYA_FDR_THRESHOLD)
         addPolyA(anno_arr, num_anno++, clt, polyA, position, max_len);
 
     if (num_anno - numOrigin == 0)
@@ -303,8 +306,11 @@ void annotate_tsd(Cluster *clt, Annotation *anno_arr, int num_anno)
     char input_fn[100] = {'\0'};
     sprintf(input_fn, "tmp_anno/%d_%d_TsdToLocal.bam", clt->tid, clt->idx);
     htsFile *input_bam = sam_open(input_fn, "rb");
+    if (!input_bam) { fprintf(stderr, "Error: Cannot open %s\n", input_fn); return; }
     sam_hdr_t *header = sam_hdr_read(input_bam);
+    if (!header) { sam_close(input_bam); fprintf(stderr, "Error: Cannot read header from %s\n", input_fn); return; }
     bam1_t *bam = bam_init1();
+    if (!bam) { sam_hdr_destroy(header); sam_close(input_bam); return; }
 
     int leftEnd = -1, rightStart = -1;
     int leftDelta = 0, rightDelta = 0;

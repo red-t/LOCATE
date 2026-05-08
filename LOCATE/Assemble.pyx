@@ -21,25 +21,34 @@ cdef int get_min_edge(int num_seg_raw):
         return 5
 
 
-cpdef assemble_cluster(Cluster[::1] clt_view, dict cluster_data_by_tid, tuple block, object cmd_args, int extra_thread):
-    """
-    Assembles clusters into sequences using multiple steps, including primary assembly, polishing, and recalibration.
+cdef bint _run_polishing_round(str prefix, str target_type):
+    """Run one round of minimap2 + samtools consensus polishing.
 
-    Parameters:
-        clt_view (Cluster[::1]): Memory view of the cluster array.
-        cluster_data_by_tid (dict): A dictionary where the key is the target ID (tid) and the value is a tuple containing:
-                                    - clt_arr: Array of clusters.
-                                    - seg_arr: Array of segments.
-        block (tuple): A tuple (start_idx, end_idx) specifying the range of clusters to process.
-        cmd_args (object): Command-line arguments or configuration object containing file paths and parameters.
-        extra_thread (int): Number of additional threads to use.
+    Args:
+        prefix: File path prefix (e.g. "tmp_assm/0_1")
+        target_type: "assm" for first round, "assembled" for second round
+    Returns:
+        True if output file was created, False otherwise
     """
+    cdef str cmd = (
+        "minimap2 -aY {0}_{1}.fa {0}.fa | samtools sort | samtools view -bhS -F 3332 -o {0}_RawToAssm.bam && "
+        "samtools consensus --ff 3332 -m simple -c 0 -d 1 -H 0.9 {0}_RawToAssm.bam -o {0}_assembled.fa"
+    ).format(prefix, target_type)
+    try:
+        subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash', check=True)
+    except subprocess.CalledProcessError:
+        pass
+    return os.path.isfile(f"{prefix}_assembled.fa") and os.path.getsize(f"{prefix}_assembled.fa") > 0
+
+
+cpdef assemble_cluster(Cluster[::1] clt_view, dict cluster_data_by_tid, tuple block, object cmd_args, int extra_thread):
+    """Assemble clusters into sequences using wtdbg2 assembly, two-round polishing, and recalibration."""
 
     cdef int num_thread = 1 + extra_thread
     cdef int node_len = cmd_args.node_len
     cdef int i, min_edge, rounds
     cdef str cmd, prefix
-    
+
     start_idx, end_idx = block
     for i in range(start_idx, end_idx):
         if is_lowfreq_clt(&clt_view[i]):
@@ -56,15 +65,21 @@ cpdef assemble_cluster(Cluster[::1] clt_view, dict cluster_data_by_tid, tuple bl
             rounds += 1
             cmd = "wtdbg2 -p 5 -k 15 -l 256 -e {0} -S 1 -A --rescue-low-cov-edges --node-len {1} --ctg-min-length {1} " \
                 "--ctg-min-nodes 1 -q -t {2} -i {3}.fa -fo {3}".format(min_edge, node_len, num_thread, prefix)
-            subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
+            try:
+                subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash', check=True)
+            except subprocess.CalledProcessError:
+                pass
             if os.path.isfile(f"{prefix}.ctg.lay.gz") == False:
                 continue
-            
+
             cmd = "wtpoa-cns -q -c 1 -t {0} -i {1}.ctg.lay.gz -fo {1}_assm.fa".format(num_thread, prefix)
-            subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
+            try:
+                subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash', check=True)
+            except subprocess.CalledProcessError:
+                pass
             if os.path.isfile(f"{prefix}_assm.fa") and (os.path.getsize(f"{prefix}_assm.fa") != 0):
                 break
-        
+
         if (not os.path.isfile(f"{prefix}_assm.fa")) or (os.path.getsize(f"{prefix}_assm.fa") == 0):
             output_fn = f"{prefix}_assm.fa"
             print("[Warning] wtdbg2 failed for cluster {}_{}. Try to select one read as assembly.".format(clt_view[i].tid, clt_view[i].idx))
@@ -72,22 +87,14 @@ cpdef assemble_cluster(Cluster[::1] clt_view, dict cluster_data_by_tid, tuple bl
                 continue
 
         # Step 2: First round polishing
-        cmd = "minimap2 -aY {0}_assm.fa {0}.fa | samtools sort | samtools view -bhS -F 3332 -o {0}_RawToAssm.bam && " \
-            "samtools consensus --ff 3332 -m simple -c 0 -d 1 -H 0.9 {0}_RawToAssm.bam -o {0}_assembled.fa".format(prefix)
-        subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
-
-        if (not os.path.isfile(f"{prefix}_assembled.fa")) or (os.path.getsize(f"{prefix}_assembled.fa") == 0):
+        if not _run_polishing_round(prefix, "assm"):
             output_fn = f"{prefix}_assembled.fa"
             print("[Warning] First round polishing failed for cluster {}_{}. Try to select one read as polished sequence.".format(clt_view[i].tid, clt_view[i].idx))
             if output_read_as_assmbly(clt_view, cluster_data_by_tid, cmd_args, i, output_fn) != 0:
                 continue
 
         # Step 3: Second round polishing
-        cmd = "minimap2 -aY {0}_assembled.fa {0}.fa | samtools sort | samtools view -bhS -F 3332 -o {0}_RawToAssm.bam && " \
-            "samtools consensus --ff 3332 -m simple -c 0 -d 1 -H 0.9 {0}_RawToAssm.bam -o {0}_assembled.fa".format(prefix)
-        subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
-
-        if (not os.path.isfile(f"{prefix}_assembled.fa")) or (os.path.getsize(f"{prefix}_assembled.fa") == 0):
+        if not _run_polishing_round(prefix, "assembled"):
             output_fn = f"{prefix}_assembled.fa"
             print("[Warning] Second round polishing failed for cluster {}_{}. Try to select one read as polished sequence.".format(clt_view[i].tid, clt_view[i].idx))
             if output_read_as_assmbly(clt_view, cluster_data_by_tid, cmd_args, i, output_fn) != 0:
@@ -103,7 +110,10 @@ cpdef assemble_cluster(Cluster[::1] clt_view, dict cluster_data_by_tid, tuple bl
             "END{{for(ctg in a){{if(a[ctg]!=\"\"){{print ctg; print a[ctg]}}}}}}' > {0}_tmp.fa && "
             "mv {0}_tmp.fa {0}_assembled.fa"
         ).format(prefix)
-        subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
+        try:
+            subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash', check=True)
+        except subprocess.CalledProcessError:
+            pass
 
 
 #####################
@@ -115,7 +125,10 @@ cdef recalibration(str prefix, object cmd_args):
     cmd = "minimap2 -aY {0}_polished.fa {0}.fa | " \
         "samtools sort | samtools view -bhS -F 3332 -o {0}_RawToPolish.bam && " \
         "samtools index {0}_RawToPolish.bam".format(prefix)
-    subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
+    try:
+        subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash', check=True)
+    except subprocess.CalledProcessError:
+        pass
     if not os.path.exists(f"{prefix}_RawToPolish.bam.bai"):
         os.rename(f"{prefix}_polished.fa", f"{prefix}_assembled.fa")
         return

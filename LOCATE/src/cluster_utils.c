@@ -19,7 +19,7 @@ void update_cluster(Cluster *clt_arr, Segment *seg_arr, Args args)
     setCltLocationType(clt, args);
     divideByNumSeg(clt);
     divideByBgInfo(clt, args);
-    setBackbgInfo(clt, args);
+    setBgInfo(clt, args);
 }
 
 
@@ -46,7 +46,7 @@ void setTeAlignedFrac(Cluster *clt, Segment *seg_arr, Args args)
 void setCltType(Cluster *clt, Segment *seg_arr, Args args)
 {
     if (clt->numSeg == 1) {
-        clt->cltType = 1;
+        clt->cltType = CLT_TYPE_SOMATIC_1;
         return;
     }
 
@@ -66,7 +66,7 @@ void setCltType(Cluster *clt, Segment *seg_arr, Args args)
     }
     
     if (nameIsSame(args.first_bam_record, args.second_bam_record))
-        clt->cltType = 2;
+        clt->cltType = CLT_TYPE_SOMATIC_2;
 }
 
 
@@ -135,15 +135,15 @@ void countAlnFracs(Cluster *clt, Segment *segment)
 {
     switch (segment->aln_location_type)
     {
-    case 1:
+    case LOCATION_NORMAL:
         clt->alnFrac1 += 1; break;
-    case 2:
+    case LOCATION_BOUNDARY:
         clt->alnFrac2 += 1; break;
-    case 4:
+    case LOCATION_INSIDE:
         clt->alnFrac4 += 1; break;
-    case 8:
+    case LOCATION_ONE_BOUNDARY:
         clt->alnFrac8 += 1; break;
-    case 16:
+    case LOCATION_ONE_INSIDE:
         clt->alnFrac16 += 1; break;
     default:
         break;
@@ -195,16 +195,16 @@ void setCltLocationType(Cluster *clt, Args args)
     clt->repTid = repTid;
 
     if (numOverlap == 0) {
-        clt->locationType = 1;
+        clt->locationType = LOCATION_NORMAL;
         return;
     }
 
-    if (minDistanceToOverlap < 50) {
-        clt->locationType = 2;
+    if (minDistanceToOverlap < FLANK_SIZE_50) {
+        clt->locationType = LOCATION_BOUNDARY;
         return;
     }
 
-    clt->locationType = 4;
+    clt->locationType = LOCATION_INSIDE;
 }
 
 /// @brief Divide cluster values by numSeg
@@ -237,7 +237,7 @@ void divideByBgInfo(Cluster *clt, Args args)
 }
 
 /// @brief Set background info of a cluster
-void setBackbgInfo(Cluster *clt, Args args)
+void setBgInfo(Cluster *clt, Args args)
 {
     clt->bgDiv = args.bg_div;
     clt->bgDepth = args.bg_depth;

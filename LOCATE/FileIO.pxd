@@ -201,7 +201,7 @@ cdef extern from "src/io_utils.h" nogil:
     int is_lowqual_clt(Cluster *clt)
     int is_lowfreq_clt(Cluster *clt)
 
-    int get_ouput_segidx(Cluster *clt, Segment *seg_arr, Args args)
+    int get_output_segidx(Cluster *clt, Segment *seg_arr, Args args)
     void setTrimRegion(Segment *segment, int *start, int *end, int flank_size)
 
     #########################
@@ -216,12 +216,12 @@ cdef extern from "src/io_utils.h" nogil:
     void re_extract_ins_seq(Cluster *clt)
 
 
+cdef bint _resize_if_needed(object arr, int size, int *capacity, int *threshold)
 cdef Args new_args(int tid, float bg_div, float bg_depth, float bg_read_len, object cmd_args)
 cdef AiList* new_ailist(str bed_fn, const char *chrom)
-cdef ouput_seg_seqs(Segment[::1] seg_view, BamFile genome_bam, Args args)
+cdef output_seg_seqs(Segment[::1] seg_view, BamFile genome_bam, Args args)
 cdef output_highfreq_clusters_seqs(Cluster[::1] clt_view, Segment[::1] seg_view, BamFile genome_bam, Args args)
 cpdef output_lowfreq_clusters_seq(Cluster[::1] clt_view, Segment[::1] seg_view, object cmd_args, int tid, int extra_thread)
-# cpdef int output_read_as_assmbly(Cluster[::1] clt_view, dict cluster_data_by_tid, object cmd_args, int i)
 cpdef int output_read_as_assmbly(Cluster[::1] clt_view, dict cluster_data_by_tid, object cmd_args, int i, str output_fn)
 cpdef output_reference_flank(Cluster[::1] clt_view, dict cluster_data_by_tid, tuple block, object cmd_args)
 cpdef merge_output()

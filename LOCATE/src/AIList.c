@@ -6,36 +6,39 @@
  ***************************/
 AiList *initAiList(void)
 {
-	AiList *ail = malloc(1*sizeof(AiList));
-	ail->contigList = malloc(1*sizeof(Contig));
+    AiList *ail = malloc(1*sizeof(AiList));
+    if (!ail) { fprintf(stderr, "Error: Out of memory in initAiList\n"); exit(EXIT_FAILURE); }
+    ail->contigList = malloc(1*sizeof(Contig));
+    if (!ail->contigList) { fprintf(stderr, "Error: Out of memory in initAiList\n"); exit(EXIT_FAILURE); }
     Contig *firstContig = &ail->contigList[0];
 
     firstContig->numInterval = 0;
     firstContig->maxIntervals = 64;
-	firstContig->intervalList = malloc(firstContig->maxIntervals*sizeof(Interval));
-	return ail;
+    firstContig->intervalList = malloc(firstContig->maxIntervals*sizeof(Interval));
+    if (!firstContig->intervalList) { fprintf(stderr, "Error: Out of memory in initAiList\n"); exit(EXIT_FAILURE); }
+    return ail;
 }
 
 void destroyAiList(AiList *ail)
 {
-	if (ail == 0) return;
+    if (ail == 0) return;
     free(ail->contigList[0].intervalList);
-	free(ail->contigList[0].maxEndList);
-	free(ail->contigList);
-	free(ail);
+    free(ail->contigList[0].maxEndList);
+    free(ail->contigList);
+    free(ail);
 }
 
 void addInterval(AiList *ail, int start, int end, int repTid)
 {
-	if(start > end) return;
+    if(start > end) return;
 
-	Contig *firstContig = &ail->contigList[0];
-	if(firstContig->numInterval == firstContig->maxIntervals)
+    Contig *firstContig = &ail->contigList[0];
+    if(firstContig->numInterval == firstContig->maxIntervals)
         EXPAND(firstContig->intervalList, firstContig->maxIntervals);
 
-	Interval *newInterval = &firstContig->intervalList[firstContig->numInterval++];
-	newInterval->start = start;
-	newInterval->end = end;
+    Interval *newInterval = &firstContig->intervalList[firstContig->numInterval++];
+    newInterval->start = start;
+    newInterval->end = end;
     newInterval->repTid = repTid;
     return;
 }
@@ -45,6 +48,7 @@ void readBED(AiList *ail, const char* bed_fn, const char* targetChrom)
     samFile *te_bam = sam_open("tmp_build/tmp.bam", "rb");
     sam_hdr_t *header = sam_hdr_read(te_bam);
     FILE *fileHandle = fopen(bed_fn, "r");
+    if (!fileHandle) { sam_hdr_destroy(header); sam_close(te_bam); return; }
 
     char buffer[1024];
     char *chrom, *start, *end, *name;
@@ -64,7 +68,7 @@ void readBED(AiList *ail, const char* bed_fn, const char* targetChrom)
         size_t length = strlen(name);
         name[length-1] = (name[length-1] == '\n') ? '\0' : name[length-1];
         addInterval(ail, atol(start), atol(end), sam_hdr_name2tid(header, name));
-	}
+    }
 
     if (te_bam != NULL) {sam_close(te_bam); te_bam=NULL;}
     if (header != NULL) {sam_hdr_destroy(header); header=NULL;}
@@ -72,63 +76,83 @@ void readBED(AiList *ail, const char* bed_fn, const char* targetChrom)
 }
 
 void constructAiList(AiList *ail, int minCoverageLen)
-{   //New continueous memory?
-    int minCoverageLen1=minCoverageLen/2, j1, minL = MAX(64, minCoverageLen);
+{
+    int minCoverageLen1 = minCoverageLen / 2;
+    int minComponentLen = MAX(64, minCoverageLen);
+    int numCovered = 0;
     minCoverageLen += minCoverageLen1;
-    int lenT, len, iter, j, k, k0, t;
-	//1. Decomposition
-	Contig   *p  = &ail->contigList[0];
-	Interval *L1 = p->intervalList;                         //L1: to be rebuilt
-	int  numInterval = p->numInterval;
-    if(numInterval<=minL){
-        p->numComp = 1, p->lenComp[0] = numInterval, p->idxComp[0] = 0;
-    }
-    else{
-        Interval *L0 = malloc(numInterval*sizeof(Interval)); 	//L0: serve as input list
-        Interval *L2 = malloc(numInterval*sizeof(Interval));   //L2: extracted list
-        memcpy(L0, L1, numInterval*sizeof(Interval));
-        iter = 0;	k = 0;	k0 = 0;
-        lenT = numInterval;
-        while(iter<MAXC && lenT>minL){
-            len = 0;
-            for(t=0; t<lenT-minCoverageLen; t++){
-                int tt = L0[t].end;
-                j=1;    j1=1;
-                while(j<minCoverageLen && j1<minCoverageLen1){
-                    if(L0[j+t].end>=tt) j1++;
-                    j++;
+    int numRemaining, bufLen, iter, compIdx, outputIdx, componentStart, idx;
+
+    Contig *contig = &ail->contigList[0];
+    Interval *outputIntervals = contig->intervalList;  // to be rebuilt in-place
+    int numInterval = contig->numInterval;
+
+    if (numInterval <= minComponentLen) {
+        contig->numComp = 1;
+        contig->lenComp[0] = numInterval;
+        contig->idxComp[0] = 0;
+    } else {
+        // 1. Decomposition: split intervals into components by coverage
+        Interval *inputIntervals = malloc(numInterval * sizeof(Interval));
+        Interval *bufferIntervals = malloc(numInterval * sizeof(Interval));
+        memcpy(inputIntervals, outputIntervals, numInterval * sizeof(Interval));
+
+        iter = 0;
+        outputIdx = 0;
+        componentStart = 0;
+        numRemaining = numInterval;
+
+        while (iter < MAXC && numRemaining > minComponentLen) {
+            bufLen = 0;
+            for (idx = 0; idx < numRemaining - minCoverageLen; idx++) {
+                int endT = inputIntervals[idx].end;
+                compIdx = 1;
+                numCovered = 1;
+                while (compIdx < minCoverageLen && numCovered < minCoverageLen1) {
+                    if (inputIntervals[compIdx + idx].end >= endT) numCovered++;
+                    compIdx++;
                 }
-                if(j1<minCoverageLen1) memcpy(&L2[len++], &L0[t], sizeof(Interval));
-                else memcpy(&L1[k++], &L0[t], sizeof(Interval));
+                if (numCovered < minCoverageLen1)
+                    memcpy(&bufferIntervals[bufLen++], &inputIntervals[idx], sizeof(Interval));
+                else
+                    memcpy(&outputIntervals[outputIdx++], &inputIntervals[idx], sizeof(Interval));
             }
-            memcpy(&L1[k], &L0[lenT-minCoverageLen], minCoverageLen*sizeof(Interval));
-            k += minCoverageLen, lenT = len;
-            p->idxComp[iter] = k0;
-            p->lenComp[iter] = k-k0;
-            k0 = k, iter++;
-            if(lenT<=minL || iter==MAXC-2){			//exit: add L2 to the end
-                if(lenT>0){
-                    memcpy(&L1[k], L2, lenT*sizeof(Interval));
-                    p->idxComp[iter] = k;
-                    p->lenComp[iter] = lenT;
+            memcpy(&outputIntervals[outputIdx], &inputIntervals[numRemaining - minCoverageLen],
+                minCoverageLen * sizeof(Interval));
+            outputIdx += minCoverageLen;
+            numRemaining = bufLen;
+
+            contig->idxComp[iter] = componentStart;
+            contig->lenComp[iter] = outputIdx - componentStart;
+            componentStart = outputIdx;
+            iter++;
+
+            if (numRemaining <= minComponentLen || iter == MAXC - 2) {
+                if (numRemaining > 0) {
+                    memcpy(&outputIntervals[outputIdx], bufferIntervals, numRemaining * sizeof(Interval));
+                    contig->idxComp[iter] = outputIdx;
+                    contig->lenComp[iter] = numRemaining;
                     iter++;
                 }
-                p->numComp = iter;
+                contig->numComp = iter;
+            } else {
+                memcpy(inputIntervals, bufferIntervals, numRemaining * sizeof(Interval));
             }
-            else memcpy(L0, L2, lenT*sizeof(Interval));
         }
-        free(L2),free(L0);
+        free(bufferIntervals);
+        free(inputIntervals);
     }
-    //2. Augmentation
-    p->maxEndList = malloc(numInterval*sizeof(int));
-    for(j=0; j<p->numComp; j++){
-        k0 = p->idxComp[j];
-        k  = k0 + p->lenComp[j];
-        int tt = L1[k0].end;
-        p->maxEndList[k0] = tt;
-        for(t=k0+1; t<k; t++){
-            if(L1[t].end > tt) tt = L1[t].end;
-            p->maxEndList[t] = tt;
+
+    // 2. Augmentation: build max-end index for each component
+    contig->maxEndList = malloc(numInterval * sizeof(int));
+    for (compIdx = 0; compIdx < contig->numComp; compIdx++) {
+        componentStart = contig->idxComp[compIdx];
+        int compEnd = componentStart + contig->lenComp[compIdx];
+        int maxEnd = outputIntervals[componentStart].end;
+        contig->maxEndList[componentStart] = maxEnd;
+        for (idx = componentStart + 1; idx < compEnd; idx++) {
+            if (outputIntervals[idx].end > maxEnd) maxEnd = outputIntervals[idx].end;
+            contig->maxEndList[idx] = maxEnd;
         }
     }
 }
@@ -194,7 +218,7 @@ void ailistQueryPoint(AiList *ailist, int queryPoint, int flankSize, int *numOve
                 Interval *interval = &contig->intervalList[j];
                 if(isOverlap1(query_start, query_end, interval))
                     updateMinDistPoint(interval, queryPoint, numOverlap, minDistance);
-			}
+            }
             continue;
         }
 
