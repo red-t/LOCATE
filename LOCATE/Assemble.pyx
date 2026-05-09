@@ -1,8 +1,11 @@
 import os
+import logging
 import numpy as np
 import subprocess
 from collections import OrderedDict, Counter, defaultdict
 from cpython cimport PyBytes_FromStringAndSize
+
+logger = logging.getLogger(__name__)
 
 ######################
 ### Local Assembly ###
@@ -82,21 +85,21 @@ cpdef assemble_cluster(Cluster[::1] clt_view, dict cluster_data_by_tid, tuple bl
 
         if (not os.path.isfile(f"{prefix}_assm.fa")) or (os.path.getsize(f"{prefix}_assm.fa") == 0):
             output_fn = f"{prefix}_assm.fa"
-            print("[Warning] wtdbg2 failed for cluster {}_{}. Try to select one read as assembly.".format(clt_view[i].tid, clt_view[i].idx))
+            logger.warning("wtdbg2 failed for cluster {}_{}. Try to select one read as assembly.".format(clt_view[i].tid, clt_view[i].idx))
             if output_read_as_assmbly(clt_view, cluster_data_by_tid, cmd_args, i, output_fn) == 0:
                 continue
 
         # Step 2: First round polishing
         if not _run_polishing_round(prefix, "assm"):
             output_fn = f"{prefix}_assembled.fa"
-            print("[Warning] First round polishing failed for cluster {}_{}. Try to select one read as polished sequence.".format(clt_view[i].tid, clt_view[i].idx))
+            logger.warning("First round polishing failed for cluster {}_{}. Try to select one read as polished sequence.".format(clt_view[i].tid, clt_view[i].idx))
             if output_read_as_assmbly(clt_view, cluster_data_by_tid, cmd_args, i, output_fn) != 0:
                 continue
 
         # Step 3: Second round polishing
         if not _run_polishing_round(prefix, "assembled"):
             output_fn = f"{prefix}_assembled.fa"
-            print("[Warning] Second round polishing failed for cluster {}_{}. Try to select one read as polished sequence.".format(clt_view[i].tid, clt_view[i].idx))
+            logger.warning("Second round polishing failed for cluster {}_{}. Try to select one read as polished sequence.".format(clt_view[i].tid, clt_view[i].idx))
             if output_read_as_assmbly(clt_view, cluster_data_by_tid, cmd_args, i, output_fn) != 0:
                 continue
 

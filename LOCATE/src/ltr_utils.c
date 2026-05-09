@@ -95,7 +95,7 @@ void outputSeq(int tid, faidx_t *teFa)
 void mapEachOther(int tid)
 {
     char cmd[200] = {'0'};
-    sprintf(cmd, "minimap2 -aY -x map-ont tmp_anno/%d_left.fa tmp_anno/%d_right.fa | samtools view -bhS -o tmp_anno/%d_rightToLeft.bam - >/dev/null", tid, tid, tid);
+    sprintf(cmd, "minimap2 -aY -x map-ont tmp_anno/%d_left.fa tmp_anno/%d_right.fa 2>/dev/null | samtools view -bhS -o tmp_anno/%d_rightToLeft.bam -", tid, tid, tid);
     system(cmd);
 }
 
@@ -130,8 +130,8 @@ int getLtrLen(int tid)
         ltrLen = bam_endpos(bam) - bam->core.pos;
     }
 
-    if (ltrLen == 0)
-        printf("Warning: failed to define LTR, TE tid = %d\n", tid);
+    // if (ltrLen == 0)
+    //     printf("Warning: failed to define LTR, TE tid = %d\n", tid);
 
     if (bam != NULL) {bam_destroy1(bam); bam=NULL;}
     if (input_bam != NULL) {sam_close(input_bam); input_bam=NULL;}

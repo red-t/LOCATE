@@ -8,8 +8,6 @@ from .Cluster import build_cluster
 from .Assemble import assemble_cluster
 from .Annotate import annotate_cluster
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 ###########################
@@ -77,16 +75,22 @@ cpdef object run_in_parallel(object cmd_args):
     cdef dict cluster_data_by_tid = {}, background_info
 
     # 1. Get Background Info
+    logger.info("Stage 1/8: Extracting background information...")
     background_info = get_background_info(cmd_args.genome_bam_fn, cmd_args.num_thread)
     logger.info("Background divergence: %f", background_info["average_divergence"])
     logger.info("Background depth: %f", background_info["average_depth"])
     logger.info("Background read length: %f", background_info["median_read_length"])
+    logger.info("Stage 1/8: Done")
 
     # 2. Define LTR size
+    logger.info("Stage 2/8: Defining LTR sizes...")
     define_ltr_size(cmd_args)
+    logger.info("Stage 2/8: Done")
 
     # 3. Build TE reference
+    logger.info("Stage 3/8: Building TE reference...")
     build_te_reference(cmd_args)
+    logger.info("Stage 3/8: Done")
 
     # 4. Determine max_workers
     cdef int num_chromosomes = background_info["num_chromosomes"]
@@ -94,20 +98,30 @@ cpdef object run_in_parallel(object cmd_args):
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         # 5. Build Clusters
+        logger.info("Stage 4/8: Building clusters...")
         cluster_data_by_tid = build_clusters(executor, cmd_args, background_info, max_workers)
+        logger.info("Stage 4/8: Done")
 
         # 6. Local Assembly
+        logger.info("Stage 5/8: Performing local assembly...")
         high_quality_clusters = get_high_quality_clusters(cluster_data_by_tid)
         assemble_clusters(executor, cmd_args, high_quality_clusters, cluster_data_by_tid, max_workers)
+        logger.info("Stage 5/8: Done")
 
         # 7. Output Sequences
+        logger.info("Stage 6/8: Outputting sequences...")
         output_sequences(executor, cmd_args, cluster_data_by_tid, high_quality_clusters, num_chromosomes, max_workers)
+        logger.info("Stage 6/8: Done")
 
         # 8. Annotate Clusters
+        logger.info("Stage 7/8: Annotating clusters...")
         annotate_clusters(executor, cmd_args, cluster_data_by_tid, high_quality_clusters, max_workers)
+        logger.info("Stage 7/8: Done")
 
     # 9. Merge Output
+    logger.info("Stage 8/8: Merging output...")
     merge_output()
+    logger.info("Stage 8/8: Done")
     return cluster_data_by_tid
 
 

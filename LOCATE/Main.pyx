@@ -3,10 +3,9 @@ import os
 import argparse
 import shutil
 import logging
+import warnings
 from .ParallelTaskExecutor import run_in_parallel
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 ###########################
@@ -52,6 +51,9 @@ def parse_args() -> argparse.Namespace:
                         help='Reads (breakpoints) within maxDist will be merged as a cluster')
     parser.add_argument('-O', '--overhang', dest='overhang', type=int, default=200,
                         help='Min overhang length, reads with genomic-mapping-length < overhang will be ignored')
+    parser.add_argument('-v', '--verbose', action='store_const', dest='log_level',
+                        const=logging.DEBUG, default=logging.INFO,
+                        help='Enable verbose logging')
     return parser.parse_args()
 
 
@@ -116,20 +118,6 @@ def prepare_directories(out_path: str) -> None:
         raise OSError(f"Failed to prepare directories: {e}")
 
 
-def summarize_results(tid_to_result: dict) -> None:
-    """
-    Summarize the results of the pipeline.
-
-    Parameters:
-        tid_to_result (dict): Results from the pipeline.
-    """
-    num_clusters = sum(result[0].shape[0] for result in tid_to_result.values())
-    num_segments = sum(result[1].shape[0] for result in tid_to_result.values())
-
-    logger.info(f"Total clusters constructed: {num_clusters}")
-    logger.info(f"Total segments constructed: {num_segments}")
-
-
 ###########################
 ### Main Function ###
 ###########################
@@ -140,10 +128,16 @@ def main():
     # 1. Parse command-line arguments
     args = parse_args()
 
-    # 2. Validate arguments
+    # 2. Configure logging
+    logging.basicConfig(level=args.log_level, format="%(asctime)s - %(levelname)s - %(message)s")
+
+    # 3. Suppress fastai pickle warning from autogluon dependency chain
+    warnings.filterwarnings("ignore", message=".*load_learner.*pickle.*", category=UserWarning)
+
+    # 4. Validate arguments
     validate_args(args)
 
-    # 3. Convert paths to absolute paths
+    # 5. Convert paths to absolute paths
     args.genome_bam_fn = os.path.abspath(args.genome_bam_fn)
     args.class_fn = os.path.abspath(args.class_fn)
     args.te_fn = os.path.abspath(args.te_fn)
@@ -157,14 +151,11 @@ def main():
     if args.blacklist_fn:
         args.blacklist_fn = os.path.abspath(args.blacklist_fn)
 
-    # 4. Prepare directories
+    # 6. Prepare directories
     prepare_directories(args.out_path)
 
-    # 5. Run the pipeline
+    # 7. Run the pipeline
     tid_to_result = run_in_parallel(args)
-
-    # 6. Summarize results
-    summarize_results(tid_to_result)
 
 
 if __name__ == "__main__":

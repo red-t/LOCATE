@@ -4,8 +4,7 @@ import logging
 import subprocess
 from collections import Counter
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 ########################
 ### Constants ###
@@ -72,7 +71,7 @@ cdef class BamFile:
                     with nogil:
                         sam_hdr_write(self.hts_file, self.header)
         except Exception as e:
-            logging.error(f"Error opening BAM file: {e}")
+            logger.error(f"Error opening BAM file: {e}")
             raise
     
     cdef htsFile *_open_hts_file(self) except? NULL:
@@ -428,7 +427,14 @@ cpdef merge_output():
     ]]
     
     # Save the result to a file
-    result_df.to_csv("result.tsv", sep="\t", index=False)
+    output_path = os.path.abspath("result.tsv")
+    result_df.to_csv(output_path, sep="\t", index=False)
+
+    # Summary logging
+    num_passed = result_df['passed'].sum()
+    num_failed = len(result_df) - num_passed
+    logger.info("Output file: %s", output_path)
+    logger.info("Total insertions: %d (passed: %d, failed: %d)", len(result_df), num_passed, num_failed)
 
 
 def _define_reconstructed_ends(flag):
