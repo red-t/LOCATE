@@ -40,7 +40,10 @@ cdef map_flank_to_assembly(int tid, int idx):
     cdef str output_fn = "tmp_anno/{}_{}_FlankToAssm.bam".format(tid, idx)
     cdef str cmd = "minimap2 -k11 -w5 --sr -O4,8 -n2 -m20 --secondary=no -t 1 -aY {} {} | " \
                    "samtools view -bhS -o {} -".format(target_fn, query_fn, output_fn)
-    subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
+    try:
+        subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash', check=True)
+    except subprocess.CalledProcessError:
+        pass
 
 
 cdef map_assm_flank_to_local(int tid, int idx):
@@ -51,8 +54,11 @@ cdef map_assm_flank_to_local(int tid, int idx):
                    "samtools view -bhS -o {} -".format(target_fn, query_fn, output_fn)
     if os.path.isfile(query_fn) == False:
         return
-    
-    subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
+
+    try:
+        subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash', check=True)
+    except subprocess.CalledProcessError:
+        pass
 
 
 cdef map_ins_seq_to_te(int tid, int idx, object cmd_args):
@@ -62,8 +68,11 @@ cdef map_ins_seq_to_te(int tid, int idx, object cmd_args):
                    "samtools view -bhS -o {} -".format(cmd_args.te_fn, query_fn, output_fn)
     if os.path.isfile(query_fn) == False:
         return
-    
-    subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
+
+    try:
+        subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash', check=True)
+    except subprocess.CalledProcessError:
+        pass
 
 
 ##########################
@@ -79,12 +88,9 @@ cdef object get_class_arr(object cmd_args):
         if len(l) < 2:
             continue
         
-        if size >= threshold:
-            capacity = int(1.5 * capacity)
-            threshold = int(0.9 * capacity)
-            class_arr.resize((capacity,), refcheck=False)
+        if _resize_if_needed(class_arr, size, &capacity, &threshold):
             class_view = class_arr
-        
+
         if l[1] == "DNA":
             class_view[size] = CLT_DNA
         elif l[1] == "LTR":
@@ -113,12 +119,9 @@ cdef object get_size_arr(object cmd_args):
         if len(l) < 1:
             continue
         
-        if size >= threshold:
-            capacity = int(1.5 * capacity)
-            threshold = int(0.9 * capacity)
-            size_arr.resize((capacity,), refcheck=False)
+        if _resize_if_needed(size_arr, size, &capacity, &threshold):
             size_view = size_arr
-        
+
         size_view[size] = int(l[1])
         size += 1
     
@@ -171,10 +174,7 @@ cdef object annotate_ins_seq(Cluster[::1] clt_view, int start_idx, int end_idx, 
         if os.path.isfile(bam_fn) == False:
             continue
 
-        if size >= threshold:
-            capacity = int(1.5 * capacity)
-            threshold = int(0.9 * capacity)
-            anno_arr.resize((capacity,), refcheck=False)
+        if _resize_if_needed(anno_arr, size, &capacity, &threshold):
             anno_view = anno_arr
 
         # 2. Annotate TE fragment, polyA/T for insSeq
@@ -207,8 +207,11 @@ cdef map_tsd_to_local(int tid, int idx):
                    "samtools view -bhS -o {} -".format(target_fn, query_fn, output_fn)
     if os.path.isfile(query_fn) == False:
         return
-    
-    subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash')
+
+    try:
+        subprocess.run(cmd, stderr=subprocess.DEVNULL, shell=True, executable='/bin/bash', check=True)
+    except subprocess.CalledProcessError:
+        pass
 
 
 ##########################

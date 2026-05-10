@@ -5,9 +5,12 @@
 void define_ltr(const char *te_fn, const char *teClassFn)
 {
     faidx_t *teFa = fai_load(te_fn);
+    if (!teFa) { fprintf(stderr, "Error: Cannot load TE reference %s\n", te_fn); return; }
     int numTe = faidx_nseq(teFa);
     int *ltr_arr = malloc(numTe * sizeof(int));
+    if (!ltr_arr) { fai_destroy(teFa); fprintf(stderr, "Error: Out of memory in define_ltr\n"); return; }
     int *class_arr = get_class_arr(numTe, teClassFn);
+    if (!class_arr) { free(ltr_arr); fai_destroy(teFa); fprintf(stderr, "Error: Out of memory in define_ltr\n"); return; }
 
     for (int i = 0; i < numTe; i++)
     {
@@ -38,7 +41,9 @@ void define_ltr(const char *te_fn, const char *teClassFn)
 int *get_class_arr(int numTe, const char *teClassFn)
 {
     FILE *classFile = fopen(teClassFn, "r");
+    if (!classFile) { fprintf(stderr, "Error: Cannot open %s\n", teClassFn); return NULL; }
     int *class_arr = malloc(numTe * sizeof(int));
+    if (!class_arr) { fclose(classFile); fprintf(stderr, "Error: Out of memory in get_class_arr\n"); return NULL; }
 
     int count = 0;
     char buffer[1024], *name, *class;
@@ -90,7 +95,7 @@ void outputSeq(int tid, faidx_t *teFa)
 void mapEachOther(int tid)
 {
     char cmd[200] = {'0'};
-    sprintf(cmd, "minimap2 -aY -x map-ont tmp_anno/%d_left.fa tmp_anno/%d_right.fa | samtools view -bhS -o tmp_anno/%d_rightToLeft.bam - >/dev/null", tid, tid, tid);
+    sprintf(cmd, "minimap2 -aY -x map-ont tmp_anno/%d_left.fa tmp_anno/%d_right.fa 2>/dev/null | samtools view -bhS -o tmp_anno/%d_rightToLeft.bam -", tid, tid, tid);
     system(cmd);
 }
 
@@ -100,8 +105,11 @@ int getLtrLen(int tid)
     char input_fn[100] = {'\0'};
     sprintf(input_fn, "tmp_anno/%d_rightToLeft.bam", tid);
     htsFile *input_bam = sam_open(input_fn, "rb");
+    if (!input_bam) { fprintf(stderr, "Warning: Cannot open %s\n", input_fn); return 0; }
     sam_hdr_t *header = sam_hdr_read(input_bam);
+    if (!header) { sam_close(input_bam); return 0; }
     bam1_t *bam = bam_init1();
+    if (!bam) { sam_hdr_destroy(header); sam_close(input_bam); return 0; }
 
     int ltrLen = 0;
     while (1)
@@ -122,8 +130,8 @@ int getLtrLen(int tid)
         ltrLen = bam_endpos(bam) - bam->core.pos;
     }
 
-    if (ltrLen == 0)
-        printf("Warning: failed to define LTR, TE tid = %d\n", tid);
+    // if (ltrLen == 0)
+    //     printf("Warning: failed to define LTR, TE tid = %d\n", tid);
 
     if (bam != NULL) {bam_destroy1(bam); bam=NULL;}
     if (input_bam != NULL) {sam_close(input_bam); input_bam=NULL;}

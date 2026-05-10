@@ -4,13 +4,22 @@ import logging
 import subprocess
 from collections import Counter
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
 
 ########################
 ### Constants ###
 ########################
 cdef int MAX_POSITION = (1 << 31) - 1
+
+
+cdef inline bint _resize_if_needed(object arr, int size, int *capacity, int *threshold):
+    if size < threshold[0]:
+        return False
+    capacity[0] = <int>(capacity[0] * 1.5)
+    threshold[0] = <int>(capacity[0] * 0.9)
+    arr.resize((capacity[0],), refcheck=False)
+    return True
+
 
 ########################
 ### BamFile Class ###
@@ -62,7 +71,7 @@ cdef class BamFile:
                     with nogil:
                         sam_hdr_write(self.hts_file, self.header)
         except Exception as e:
-            logging.error(f"Error opening BAM file: {e}")
+            logger.error(f"Error opening BAM file: {e}")
             raise
     
     cdef htsFile *_open_hts_file(self) except? NULL:
@@ -213,7 +222,7 @@ cdef AiList* new_ailist(str bed_fn, const char *chrom):
 ########################
 ### Output Functions ###
 ########################
-cdef ouput_seg_seqs(Segment[::1] seg_view, BamFile genome_bam, Args args):
+cdef output_seg_seqs(Segment[::1] seg_view, BamFile genome_bam, Args args):
     """
     Output all segments' sequences to a file.
     """
@@ -297,7 +306,7 @@ cpdef output_lowfreq_clusters_seq(Cluster[::1] clt_view, Segment[::1] seg_view, 
                 continue
 
             output_fa = BamFile(output_fn, "wF", num_thread, genome_bam)
-            j = get_ouput_segidx(&clt_view[i], &seg_view[0], args)
+            j = get_output_segidx(&clt_view[i], &seg_view[0], args)
             output_single_seq(seg_view, output_fa, iterator, dest_record, j)
             output_fa.close()
     finally:
@@ -307,7 +316,6 @@ cpdef output_lowfreq_clusters_seq(Cluster[::1] clt_view, Segment[::1] seg_view, 
         del genome_bam
 
 
-# cpdef int output_read_as_assmbly(Cluster[::1] clt_view, dict cluster_data_by_tid, object cmd_args, int i):
 cpdef int output_read_as_assmbly(Cluster[::1] clt_view, dict cluster_data_by_tid, object cmd_args, int i, str output_fn):
     """
     Output one segment sequence as assembly for high-frequency cluster that failed to be assembled.
@@ -319,13 +327,12 @@ cpdef int output_read_as_assmbly(Cluster[::1] clt_view, dict cluster_data_by_tid
     cdef BamFile genome_bam = BamFile(cmd_args.genome_bam_fn, "rb", cmd_args.num_thread)
     cdef Iterator iterator = Iterator(genome_bam, clt_view[i].tid)
     cdef bam1_t *dest_record = bam_init1()
-    # cdef str output_fn = "tmp_assm/{}_{}_assm.fa".format(clt_view[i].tid, clt_view[i].idx)
     cdef BamFile output_fa = BamFile(output_fn, "wF", cmd_args.num_thread, genome_bam)
     cdef Args args
 
     try:
         args.overhang = cmd_args.overhang
-        j = get_ouput_segidx(&clt_view[i], &seg_view[0], args)
+        j = get_output_segidx(&clt_view[i], &seg_view[0], args)
         output_single_seq(seg_view, output_fa, iterator, dest_record, j)
     finally:
         output_fa.close()
@@ -420,7 +427,68 @@ cpdef merge_output():
     ]]
     
     # Save the result to a file
-    result_df.to_csv("result.tsv", sep="\t", index=False)
+    output_path = os.path.abspath("result.tsv")
+    result_df.to_csv(output_path, sep="\t", index=False)
+
+    # Summary logging
+    num_passed = result_df['passed'].sum()
+    num_failed = len(result_df) - num_passed
+    logger.info("Output file: %s", output_path)
+    logger.info("Total insertions: %d (passed: %d, failed: %d)", len(result_df), num_passed, num_failed)
+
+
+def _define_reconstructed_ends(flag):
+    if (flag & CLT_LEFT_FLANK_MAP) != 0:
+        return "only_left"
+    elif (flag & CLT_RIGHT_FLANK_MAP) != 0:
+        return "only_right"
+    elif (flag & (CLT_DIFF_FLANK_MAP | CLT_SAME_FLANK_MAP)) != 0:
+        return "both_end"
+    else:
+        return "unknown"
+
+
+def _define_truncation(flag):
+    if ((flag & CLT_5P_FULL) != 0) and ((flag & CLT_3P_FULL) != 0):
+        return "full"
+    elif ((flag & CLT_5P_FULL) != 0) and ((flag & CLT_3P_UNKNOWN) != 0):
+        return "3p_unknown"
+    elif ((flag & CLT_5P_FULL) != 0) and ((flag & CLT_3P_UNKNOWN) == 0):
+        return "3p_truncated"
+    elif ((flag & CLT_3P_FULL) != 0) and ((flag & CLT_5P_UNKNOWN) != 0):
+        return "5p_unknown"
+    elif ((flag & CLT_3P_FULL) != 0) and ((flag & CLT_5P_UNKNOWN) == 0):
+        return "5p_truncated"
+    elif ((flag & CLT_3P_UNKNOWN) != 0) and ((flag & CLT_5P_UNKNOWN) != 0):
+        return "5p3p_unknown"
+    elif ((flag & CLT_5P_FULL) == 0) and ((flag & CLT_3P_FULL) == 0):
+        return "5p3p_truncated"
+    else:
+        return "unknown"
+
+
+def _define_te_class(flag):
+    if (flag & CLT_DNA) != 0:
+        return "DNA"
+    elif (flag & CLT_LTR) != 0:
+        return "LTR"
+    elif (flag & CLT_LINE) != 0:
+        return "LINE"
+    elif (flag & CLT_SINE) != 0:
+        return "SINE"
+    elif (flag & CLT_RETROPOSON) != 0:
+        return "Retroposon"
+    else:
+        return "unknown"
+
+
+def _define_genotype(frequency):
+    if frequency < 0.2:
+        return "0/0"
+    elif frequency >= 0.8:
+        return "1/1"
+    else:
+        return "0/1"
 
 
 def parse_flag(df):
@@ -432,63 +500,10 @@ def parse_flag(df):
     df['self2self'] = (df['flag'] & CLT_SELF_TO_SELF) != 0
     df['solo_ltr'] = (df['flag'] & CLT_SOLO_LTR) != 0
 
-    # Add reconstructed_ends column
-    def define_reconstructed_ends(flag):
-        if (flag & CLT_LEFT_FLANK_MAP) != 0:
-            return "only_left"
-        elif (flag & CLT_RIGHT_FLANK_MAP) != 0:
-            return "only_right"
-        elif (flag & (CLT_DIFF_FLANK_MAP | CLT_SAME_FLANK_MAP)) != 0:
-            return "both_end"
-        else:
-            return "unknown"
-    df['reconstructed_ends'] = df['flag'].apply(define_reconstructed_ends)
-
-    # Add truncation column
-    def define_truncation(flag):
-        if ((flag & CLT_5P_FULL) != 0) and ((flag & CLT_3P_FULL) != 0):
-            return "full"
-        elif ((flag & CLT_5P_FULL) != 0) and ((flag & CLT_3P_UNKNOWN) != 0):
-            return "3p_unknown"
-        elif ((flag & CLT_5P_FULL) != 0) and ((flag & CLT_3P_UNKNOWN) == 0):
-            return "3p_turncated"
-        elif ((flag & CLT_3P_FULL) != 0) and ((flag & CLT_5P_UNKNOWN) != 0):
-            return "5p_unknown"
-        elif ((flag & CLT_3P_FULL) != 0) and ((flag & CLT_5P_UNKNOWN) == 0):
-            return "5p_turncated"
-        elif ((flag & CLT_3P_UNKNOWN) != 0) and ((flag & CLT_5P_UNKNOWN) != 0):
-            return "5p3p_unknown"
-        elif ((flag & CLT_5P_FULL) == 0) and ((flag & CLT_3P_FULL) == 0):
-            return "5p3p_truncated"
-        else:
-            return "unknown"
-    df['truncation'] = df['flag'].apply(define_truncation)
-
-    # Add te_class column
-    def define_te_class(flag):
-        if (flag & CLT_DNA) != 0:
-            return "DNA"
-        elif (flag & CLT_LTR) != 0:
-            return "LTR"
-        elif (flag & CLT_LINE) != 0:
-            return "LINE"
-        elif (flag & CLT_SINE) != 0:
-            return "SINE"
-        elif (flag & CLT_RETROPOSON) != 0:
-            return "Retroposon"
-        else:
-            return "unknown"
-    df['te_class'] = df['flag'].apply(define_te_class)
-
-    # Add genotype column
-    def define_genotype(frequency):
-        if frequency < 0.2:
-            return "0/0"
-        elif frequency >= 0.8:
-            return "1/1"
-        else:
-            return "0/1"
-    df['genotype'] = df['frequency'].apply(define_genotype)
+    df['reconstructed_ends'] = df['flag'].apply(_define_reconstructed_ends)
+    df['truncation'] = df['flag'].apply(_define_truncation)
+    df['te_class'] = df['flag'].apply(_define_te_class)
+    df['genotype'] = df['frequency'].apply(_define_genotype)
 
 
 def generate_extra_info(row):

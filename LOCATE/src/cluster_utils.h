@@ -9,6 +9,7 @@
 #include "htslib/faidx.h"
 #include "seg_utils.h"
 #include "AIList.h"
+#include "locate_constants.h"
 
 /******************************
  *** Cluster related macros ***
@@ -91,11 +92,11 @@
  @field  balanceRatio       balance ratio based on number of left- & right-clip segments
  @field  lowMapQualFrac     fraction of segments with low mapQual (<5)
  @field  dualClipFrac       fraction of "dual-clip" alignments
- @field  alnFrac1           fraction of segments with aln_location_type=1
- @field  alnFrac2           fraction of segments with aln_location_type=2
- @field  alnFrac4           fraction of segments with aln_location_type=4
- @field  alnFrac8           fraction of segments with aln_location_type=8
- @field  alnFrac16          fraction of segments with aln_location_type=16
+ @field  alnFrac1           fraction of segments (alignment both sides in normal region)
+ @field  alnFrac2           fraction of segments (alignment both sides at repeat/gap boundary )
+ @field  alnFrac4           fraction of segments (alignment both sides inside repeat/gap)
+ @field  alnFrac8           fraction of segments (alignment one side in normal region, other side at repeat/gap boundary)
+ @field  alnFrac16          fraction of segments (alignment one side inside repeat/gap, other side in normal region)
  @field  meanMapQual        mean mapQual of cluster
  @field  meanAlnScore       mean per-base alignment score (based on teAlignments)
  @field  meanQueryMapFrac   mean query mapped fraction (based on teAlignments)
@@ -250,7 +251,7 @@ void divideByNumSeg(Cluster *clt);
 void divideByBgInfo(Cluster *clt, Args args);
 
 /// @brief Set background info of a cluster
-void setBackbgInfo(Cluster *clt, Args args);
+void setBgInfo(Cluster *clt, Args args);
 
 
 /*****************

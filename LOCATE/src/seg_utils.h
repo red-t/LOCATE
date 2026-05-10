@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include "htslib/sam.h"
 #include "AIList.h"
+#include "locate_constants.h"
 
 /******************
  *** Structures ***

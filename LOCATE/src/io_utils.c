@@ -5,7 +5,7 @@
  ****************************/
 
 /// @brief select a segment to output as assembled contig
-int get_ouput_segidx(Cluster *clt, Segment *seg_arr, Args args)
+int get_output_segidx(Cluster *clt, Segment *seg_arr, Args args)
 {
     int clipIdx = -1;
     int insIdx = -1;
@@ -73,6 +73,7 @@ void extract_ref_flankseq(char *ref_fn, Cluster *clt_arr, int start_idx, int end
 {
     FlankRegion region = initFlankRegion();
     faidx_t *refFa = fai_load((const char *)ref_fn);
+    if (!refFa) { fprintf(stderr, "Error: Cannot load reference %s\n", ref_fn); return; }
 
     for (int i = start_idx; i < end_idx; i++)
     {
@@ -106,6 +107,7 @@ void outputFlank(Cluster *clt, faidx_t *refFa, FlankRegion region)
     char output_fn[100] = {'\0'};
     sprintf(output_fn, "tmp_anno/%d_%d_flank.fa", clt->tid, clt->idx);
     FILE *fp = fopen(output_fn, "w");
+    if (!fp) { fprintf(stderr, "Error: Cannot open %s for writing\n", output_fn); return; }
     fprintf(fp, ">0\n%s\n", leftSeq);
     fprintf(fp, ">1\n%s\n", rightSeq);
     fclose(fp);
@@ -125,6 +127,7 @@ void outputLocal(Cluster *clt, faidx_t *refFa, FlankRegion region)
     char output_fn[100] = {'\0'};
     sprintf(output_fn, "tmp_anno/%d_%d_local.fa", clt->tid, clt->idx);
     FILE *fp = fopen(output_fn, "w");
+    if (!fp) { fprintf(stderr, "Error: Cannot open %s for writing\n", output_fn); return; }
     fprintf(fp, ">%d\n%s\n", start, localSeq);
     fclose(fp);
 
@@ -177,8 +180,11 @@ void setInsRegion(Cluster *clt, InsRegion *region)
     char input_fn[100] = {'\0'};
     sprintf(input_fn, "tmp_anno/%d_%d_FlankToAssm.bam", clt->tid, clt->idx);
     htsFile *input_bam = sam_open(input_fn, "rb");
+    if (!input_bam) return;
     sam_hdr_t *header = sam_hdr_read(input_bam);
+    if (!header) { sam_close(input_bam); return; }
     bam1_t *bam = bam_init1();
+    if (!bam) { sam_hdr_destroy(header); sam_close(input_bam); return; }
 
     int minRightClip = INT_MAX;
     int minLeftClip = INT_MAX;
@@ -274,6 +280,7 @@ void outputInsSeq(faidx_t *assmFa, Cluster *clt)
     sprintf(output_fn, "tmp_anno/%d_%d_insertion.fa", clt->tid, clt->idx);
 
     FILE *fp = fopen(output_fn, "w");
+    if (!fp) { fprintf(stderr, "Error: Cannot open %s for writing\n", output_fn); return; }
     fprintf(fp, ">%d_%d_%d_%d\n%s\n", clt->tid1, clt->leftMost, clt->tid2, clt->rightMost, insSeq);
     fclose(fp);
 
@@ -367,8 +374,11 @@ void reSetInsRegion(Cluster *clt, faidx_t *assmFa)
     char input_fn[100] = {'\0'};
     sprintf(input_fn, "tmp_anno/%d_%d_AssmFlankToLocal.bam", clt->tid, clt->idx);
     htsFile *input_bam = sam_open(input_fn, "rb");
+    if (!input_bam) return;
     sam_hdr_t *header = sam_hdr_read(input_bam);
+    if (!header) { sam_close(input_bam); return; }
     bam1_t *bam = bam_init1();
+    if (!bam) { sam_hdr_destroy(header); sam_close(input_bam); return; }
     int leftEnd = 0, rightStart = 0, leftLen = 0, rightLen = 0;
     int localStart = atoi(sam_hdr_tid2name(header, 0));
     uint32_t leftCigar1 = 0, leftCigar2 = 0;

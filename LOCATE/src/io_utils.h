@@ -13,7 +13,7 @@
 #define is_lowfreq_clt(clt) ((clt)->cltType != 0)
 
 /// @brief select a segment to output from cluster
-int get_ouput_segidx(Cluster *clt, Segment *seg_arr, Args args);
+int get_output_segidx(Cluster *clt, Segment *seg_arr, Args args);
 
 /// @brief get extended region of the segment
 void setTrimRegion(Segment *segment, int *start, int *end, int flank_size);
