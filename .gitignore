@@ -1,0 +1,8 @@
+build/
+*.egg-info/
+*.so
+LOCATE/*.c
+LOCATE/*.so
+__pycache__/
+.pytest_cache/
+test_output/
