@@ -12,12 +12,23 @@ You can install LOCATE using conda or mamba. If there's no `mamba` in your envir
 mamba install huzr::locate
 ```
 
-### 1.2 Installation by Docker
+### 1.2 Installation by container
 
-Or, you can install through Docker.
+Or, you can install through Docker or Singularity.
 
 ```shell
-docker build -t locate https://github.com/red-t/LOCATE.git
+# Docker pull from dockerhub
+docker pull huzr14830/locate
+docker run huzr14830/locate --help
+
+# Singularity pull from dockerhub
+singularity pull locate.sif docker://huzr14830/locate
+singularity run --cleanenv locate.sif --help
+
+# Build locally
+git clone git@github.com:red-t/LOCATE.git
+cd LOCATE
+docker build -t locate .
 docker run locate --help
 ```
 
@@ -30,7 +41,8 @@ git clone https://github.com/red-t/LOCATE.git
 cd LOCATE
 mamba env create -f environment.yml
 mamba activate locate
-make
+make && make clean
+locate --help
 ```
 
 ## 2. Download annotations

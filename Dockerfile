@@ -2,15 +2,8 @@ FROM condaforge/miniforge3:latest
 
 WORKDIR /opt/locate
 
-COPY environment.yml .
-
-RUN mamba env create -f environment.yml && \
-    mamba clean -afy
-
-COPY . .
-
-RUN mamba run -n locate pip install . --no-deps && \
-    mamba run -n locate make clean
+RUN mamba env create -n locate && \
+    mamba run -n locate mamba install -c conda-forge -c bioconda -c huzr huzr::locate
 
 ENTRYPOINT ["mamba", "run", "-n", "locate", "locate"]
 CMD ["--help"]
