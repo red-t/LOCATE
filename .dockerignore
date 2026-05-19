@@ -1,0 +1,7 @@
+tests/
+.git/
+build/
+*.egg-info/
+__pycache__/
+*.pyc
+.claude/
