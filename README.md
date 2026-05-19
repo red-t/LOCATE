@@ -2,46 +2,55 @@
 
 LOCATE (Long-read to Characterize All Transposable Elements) is a mapping-based method using long-read whole genome sequencing data (ONT / PacBio) to detect and assemble transposon insertions.
 
-## 1. Installation by conda / mamba
+## 1. Installation
+
+### 1.1 Installation by conda / mamba
 
 You can install LOCATE using conda or mamba. If there's no `mamba` in your environment, we recommend that you start with the [Miniforge distribution](https://github.com/conda-forge/miniforge).
 
 ```shell
-mamba create -n locate
-mamba activate locate
-mamba install locate
+mamba install huzr::locate
 ```
 
-## 2. Installation from source
+### 1.2 Installation by container
+
+Or, you can install through Docker or Singularity.
+
+```shell
+# Docker pull from dockerhub
+docker pull huzr14830/locate
+docker run huzr14830/locate --help
+
+# Singularity pull from dockerhub
+singularity pull locate.sif docker://huzr14830/locate
+singularity run --cleanenv locate.sif --help
+
+# Build locally
+git clone git@github.com:red-t/LOCATE.git
+cd LOCATE
+docker build -t locate .
+docker run locate --help
+```
+
+### 1.3 Installation from source
 
 Or, you can install from source code.
 
-### 2.1 Preparing dependencies
-
 ```shell
-mamba create -n locate python=3.10.13 cython=3.0.6 scikit-learn=1.3.2 autogluon=1.0.0 samtools=1.21 minimap2=2.28 wtdbg=2.5 "setuptools<70"
-mamba activate locate
-```
-### 2.2 Clone the repository
-
-```shell
-git@github.com:red-t/LOCATE.git
+git clone https://github.com/red-t/LOCATE.git
 cd LOCATE
+mamba env create -f environment.yml
+mamba activate locate
+make && make clean
+locate --help
 ```
 
-### 2.3 Build LOCATE
+## 2. Download annotations
+LOCATE compatible `annotations` and `models` can be downloaded from [here](https://users.wenglab.org/boxu/LOCATE/data.html).
 
-```shell
-make
-make clean
-```
+## 3. Quick Start
 
-## 3. Download annotations
-LOCATE compatible `annotations/models` can be downloaded from [here](https://users.wenglab.org/boxu/LOCATE/data.html).
-
-## 4. Quick Start
-
-### 4.1 Most common way
+### 3.1 Most common way
 
 The most common way to call transposon insertions from long read alignments (PacBio / ONT), you can use:
 
@@ -58,14 +67,14 @@ minimap2 -aYx $PRESET $REF $QUERY | samtools view -bhS - | samtools sort -o sort
 samtools index sorted.bam
 ```
 
-### 4.2 No pretrained model
+### 3.2 No pretrained model
 
 Currently, LOCATE provides pretrained models for GRCh38 and Dm6.
 If no models are available for the genome assembly or species you are working with, one alternative is to use the existing models.
 
 For example, the GRCh38 model can be used if your sequencing data was generated from an individual library, while the Dm6 model may be appropriate for data generated from a pooled library.
 
-## 5. Output
+## 4. Output
 
 The tab-delimited file `output_path/result.tsv` stores the result of LOCATE.
 
@@ -89,3 +98,4 @@ Column  Value               Description
 15      downstream_seq      downstream sequence of the insertion sequence, from the assembled sequence (has the same orientation as the reference)
 16      extra_info          extra information
 ```
+ 

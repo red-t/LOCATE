@@ -17,3 +17,8 @@ dependencies = [
 
 [project.scripts]
 locate = "LOCATE.Main:main"
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: slow integration tests that run the full pipeline",
+]
