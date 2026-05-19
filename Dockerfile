@@ -1,4 +1,4 @@
-FROM condaforge/mambaforge:latest
+FROM condaforge/miniforge3:latest
 
 WORKDIR /opt/locate
 

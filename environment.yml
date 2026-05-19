@@ -12,5 +12,7 @@ dependencies:
   - wtdbg=2.5
   - scikit-learn=1.3.2
   - autogluon=1.0.0
+  - c-compiler
+  - make
   - setuptools<70
   - pip
