@@ -75,6 +75,7 @@ ClusterDt = np.dtype([
     ('numLeft',             np.int32),
     ('numMiddle',           np.int32),
     ('numRight',            np.int32),
+    ('numRef',              np.int32),
     ('tid1',                np.int32),
     ('leftMost',            np.int32),
     ('tid2',                np.int32),

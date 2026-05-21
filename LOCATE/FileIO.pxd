@@ -121,6 +121,7 @@ cdef extern from "src/cluster_utils.h" nogil:
         int         numLeft
         int         numMiddle
         int         numRight
+        int         numRef
         int         tid1
         int         leftMost
         int         tid2
@@ -224,4 +225,4 @@ cdef output_highfreq_clusters_seqs(Cluster[::1] clt_view, Segment[::1] seg_view,
 cpdef output_lowfreq_clusters_seq(Cluster[::1] clt_view, Segment[::1] seg_view, object cmd_args, int tid, int extra_thread)
 cpdef int output_read_as_assmbly(Cluster[::1] clt_view, dict cluster_data_by_tid, object cmd_args, int i, str output_fn)
 cpdef output_reference_flank(Cluster[::1] clt_view, dict cluster_data_by_tid, tuple block, object cmd_args)
-cpdef merge_output()
+cpdef merge_output(genotyper=*)

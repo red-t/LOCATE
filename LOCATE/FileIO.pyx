@@ -3,6 +3,7 @@ import pandas as pd
 import logging
 import subprocess
 from collections import Counter
+from .genotyper import genotype_from_counts, define_genotype_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -391,7 +392,7 @@ cpdef output_reference_flank(Cluster[::1] clt_view, dict cluster_data_by_tid, tu
     extract_ref_flankseq(ref_fn, &clt_view[0], start_idx, end_idx)
 
 
-cpdef merge_output():
+cpdef merge_output(genotyper='bayesian'):
     """
     Merge output files into a single result, with additional flag parsing.
     """
@@ -403,11 +404,11 @@ cpdef merge_output():
     clt_df = pd.concat(clt_dfs, ignore_index=True)
     clt_df.columns = [
         "insertion_id", "chrom", "start", "end", "prob", "total_support",
-        "leftclip_reads", "spanning_reads", "rightclip_reads", "assembled",
+        "leftclip_reads", "spanning_reads", "rightclip_reads", "num_ref", "assembled",
         "tsd_seq", "insertion_seq", "upstream_seq", "downstream_seq", "flag", "frequency"
         ]
     # Parse the flag field
-    parse_flag(clt_df)
+    parse_flag(clt_df, genotyper=genotyper)
 
     # Load and merge annotations
     anno_dfs = [pd.read_csv(f, sep="\t", header=None) for f in anno_files]
@@ -421,11 +422,16 @@ cpdef merge_output():
     result_df["extra_info"] = result_df.apply(generate_extra_info, axis=1)
 
     # Select necessary columns
-    result_df = result_df[[
+    output_columns = [
         "chrom", "start", "end", "family", "frequency", "strand", "genotype", "passed", "query_region",
         "target_region", "total_support", "tsd_seq", "insertion_seq", "upstream_seq", "downstream_seq", "extra_info"
-    ]]
-    
+    ]
+    if 'genotype_quality' in result_df.columns:
+        # Insert genotype_quality after genotype
+        idx = output_columns.index("genotype")
+        output_columns.insert(idx + 1, "genotype_quality")
+    result_df = result_df[output_columns]
+
     # Save the result to a file
     output_path = os.path.abspath("result.tsv")
     result_df.to_csv(output_path, sep="\t", index=False)
@@ -482,16 +488,7 @@ def _define_te_class(flag):
         return "unknown"
 
 
-def _define_genotype(frequency):
-    if frequency < 0.2:
-        return "0/0"
-    elif frequency >= 0.8:
-        return "1/1"
-    else:
-        return "0/1"
-
-
-def parse_flag(df):
+def parse_flag(df, genotyper='bayesian'):
     df['passed'] = (df['flag'] & CLT_PASS) != 0
     df['assembled'] = (df['flag'] & CLT_ASSEMBLED) != 0
     df['has_polya'] = (df['flag'] & CLT_POLYA) != 0
@@ -503,7 +500,15 @@ def parse_flag(df):
     df['reconstructed_ends'] = df['flag'].apply(_define_reconstructed_ends)
     df['truncation'] = df['flag'].apply(_define_truncation)
     df['te_class'] = df['flag'].apply(_define_te_class)
-    df['genotype'] = df['frequency'].apply(_define_genotype)
+
+    if genotyper == 'threshold':
+        df['genotype'] = df['frequency'].apply(define_genotype_threshold)
+    else:
+        genotypes = [genotype_from_counts(
+            r.leftclip_reads, r.spanning_reads, r.rightclip_reads, r.num_ref
+        ) for _, r in df.iterrows()]
+        df['genotype'] = [g[0] for g in genotypes]
+        df['genotype_quality'] = [g[1] for g in genotypes]
 
 
 def generate_extra_info(row):
