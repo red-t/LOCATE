@@ -5,4 +5,4 @@ LOCATE/*.c
 LOCATE/*.so
 __pycache__/
 .pytest_cache/
-test_output/
+test_*_*

@@ -120,7 +120,7 @@ cpdef object run_in_parallel(object cmd_args):
 
     # 9. Merge Output
     logger.info("Stage 8/8: Merging output...")
-    merge_output()
+    merge_output(cmd_args.genotyper)
     logger.info("Stage 8/8: Done")
     return cluster_data_by_tid
 

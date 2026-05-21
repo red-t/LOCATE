@@ -54,6 +54,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('-v', '--verbose', action='store_const', dest='log_level',
                         const=logging.DEBUG, default=logging.INFO,
                         help='Enable verbose logging')
+    parser.add_argument('-G', '--genotyper', dest='genotyper', type=str,
+                        default='bayesian', choices=['bayesian', 'threshold'],
+                        help='Genotyping method (default: bayesian)')
     return parser.parse_args()
 
 

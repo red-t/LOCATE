@@ -155,6 +155,7 @@ typedef struct Cluster
     int         numLeft;
     int         numMiddle;
     int         numRight;
+    int         numRef;
     int         tid1;
     int         leftMost;
     int         tid2;

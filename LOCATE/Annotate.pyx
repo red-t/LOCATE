@@ -255,8 +255,9 @@ cdef object compute_frequency(Cluster[::1] clt_view, tuple block, dict cluster_d
         finally:
             del iterator
 
-        # Step 4: Compute frequency
+        # Step 4: Compute frequency and store reference read count
         clt_view[i].frequency = float(clt_view[i].numLeft + clt_view[i].numRight + 2*clt_view[i].numMiddle) / (clt_view[i].numLeft + clt_view[i].numRight + 2*clt_view[i].numMiddle + 2*num_ref)
+        clt_view[i].numRef = num_ref
         
     genome_bam.close()
 

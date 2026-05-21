@@ -37,7 +37,7 @@ def test_parse_flag_full_te():
            CLT_5P_FULL | CLT_3P_FULL | CLT_LINE | \
            CLT_DIFF_FLANK_MAP | CLT_SAME_FLANK_MAP
     df = pd.DataFrame({"flag": [flag], "frequency": [0.95]})
-    parse_flag(df)
+    parse_flag(df, genotyper='threshold')
 
     assert df["passed"].iloc[0] == True
     assert df["assembled"].iloc[0] == True
@@ -55,7 +55,7 @@ def test_parse_flag_truncated():
 
     flag = CLT_PASS | CLT_3P_FULL | CLT_DNA | CLT_LEFT_FLANK_MAP
     df = pd.DataFrame({"flag": [flag], "frequency": [0.1]})
-    parse_flag(df)
+    parse_flag(df, genotyper='threshold')
 
     assert df["truncation"].iloc[0] == "5p_truncated"
     assert df["te_class"].iloc[0] == "DNA"
@@ -71,7 +71,7 @@ def test_parse_flag_solo_ltr():
     flag = CLT_PASS | CLT_ASSEMBLED | CLT_LTR | CLT_SOLO_LTR | \
            CLT_SINGLE_TE | CLT_DIFF_FLANK_MAP
     df = pd.DataFrame({"flag": [flag], "frequency": [0.5]})
-    parse_flag(df)
+    parse_flag(df, genotyper='threshold')
 
     assert df["solo_ltr"].iloc[0] == True
     assert df["singleton"].iloc[0] == True
@@ -85,7 +85,7 @@ def test_parse_flag_empty():
     from LOCATE.FileIO import parse_flag
 
     df = pd.DataFrame({"flag": [0], "frequency": [0.0]})
-    parse_flag(df)
+    parse_flag(df, genotyper='threshold')
 
     assert df["passed"].iloc[0] == False
     assert df["assembled"].iloc[0] == False
@@ -104,7 +104,7 @@ def test_generate_extra_info():
         "flag": [flag], "frequency": [0.95],
         "insertion_id": ["0-1"],
     })
-    parse_flag(df)
+    parse_flag(df, genotyper='threshold')
     # Add required columns for generate_extra_info
     df["leftclip_reads"] = 10
     df["spanning_reads"] = 5
@@ -115,3 +115,76 @@ def test_generate_extra_info():
     result = generate_extra_info(row)
     assert "reconstructedEnds=unknown" in result
     assert "teClass=LTR" in result
+
+
+def test_parse_flag_bayesian_hom_ref():
+    """Bayesian genotyper: all ref reads → 0/0 with quality score."""
+    from LOCATE.FileIO import parse_flag
+
+    flag = CLT_PASS | CLT_ASSEMBLED
+    df = pd.DataFrame({
+        "flag": [flag], "frequency": [0.0],
+        "leftclip_reads": [0], "spanning_reads": [0],
+        "rightclip_reads": [0], "num_ref": [50],
+    })
+    parse_flag(df)
+
+    assert df["genotype"].iloc[0] == "0/0"
+    assert df["genotype_quality"].iloc[0] >= 30
+
+
+def test_parse_flag_bayesian_hom_alt():
+    """Bayesian genotyper: mostly alt reads → 1/1 with quality score."""
+    from LOCATE.FileIO import parse_flag
+
+    flag = CLT_PASS | CLT_ASSEMBLED
+    df = pd.DataFrame({
+        "flag": [flag], "frequency": [0.95],
+        "leftclip_reads": [40], "spanning_reads": [5],
+        "rightclip_reads": [30], "num_ref": [1],
+    })
+    parse_flag(df)
+
+    assert df["genotype"].iloc[0] == "1/1"
+    assert df["genotype_quality"].iloc[0] >= 20
+
+
+def test_parse_flag_bayesian_het():
+    """Bayesian genotyper: balanced alt/ref → 0/1 with quality score."""
+    from LOCATE.FileIO import parse_flag
+
+    flag = CLT_PASS | CLT_ASSEMBLED
+    df = pd.DataFrame({
+        "flag": [flag], "frequency": [0.4],
+        "leftclip_reads": [10], "spanning_reads": [5],
+        "rightclip_reads": [8], "num_ref": [30],
+    })
+    parse_flag(df)
+
+    assert df["genotype"].iloc[0] == "0/1"
+    assert "genotype_quality" in df.columns
+
+
+def test_parse_flag_bayesian_genotype_quality_column():
+    """Bayesian genotyper should add genotype_quality column."""
+    from LOCATE.FileIO import parse_flag
+
+    flag = CLT_PASS
+    df = pd.DataFrame({
+        "flag": [flag], "frequency": [0.5],
+        "leftclip_reads": [5], "spanning_reads": [2],
+        "rightclip_reads": [5], "num_ref": [10],
+    })
+    parse_flag(df)
+    assert "genotype_quality" in df.columns
+    assert df["genotype_quality"].iloc[0] >= 0
+
+
+def test_parse_flag_threshold_no_genotype_quality():
+    """Threshold genotyper should NOT add genotype_quality column."""
+    from LOCATE.FileIO import parse_flag
+
+    flag = CLT_PASS
+    df = pd.DataFrame({"flag": [flag], "frequency": [0.5]})
+    parse_flag(df, genotyper='threshold')
+    assert "genotype_quality" not in df.columns
