@@ -34,7 +34,7 @@ int get_output_segidx(Cluster *clt, Segment *seg_arr, Args args)
         }
     }
 
-    if (insIdx > 0) // select longest spanning read
+    if (insIdx >= 0) // select longest spanning read
         return insIdx;
 
     return clipIdx; // or clip read with largest clipSize
