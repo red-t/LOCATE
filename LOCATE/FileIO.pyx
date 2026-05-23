@@ -392,7 +392,7 @@ cpdef output_reference_flank(Cluster[::1] clt_view, dict cluster_data_by_tid, tu
     extract_ref_flankseq(ref_fn, &clt_view[0], start_idx, end_idx)
 
 
-cpdef merge_output(genotyper='bayesian'):
+cpdef merge_output(genotyper='bayesian', output_format='tsv', sample_name='SAMPLE'):
     """
     Merge output files into a single result, with additional flag parsing.
     """
@@ -417,11 +417,17 @@ cpdef merge_output(genotyper='bayesian'):
 
     # Merge clt_df and anno_df
     result_df = pd.merge(clt_df, anno_df, on="insertion_id", how="outer")
-    
+
     # Create the "extra_info" column
     result_df["extra_info"] = result_df.apply(generate_extra_info, axis=1)
 
-    # Select necessary columns
+    # Write VCF output (needs full DataFrame before column selection)
+    if output_format in ('vcf', 'both'):
+        vcf_path = os.path.abspath("result.vcf")
+        write_vcf(result_df, vcf_path, sample_name)
+        logger.info("VCF output: %s", vcf_path)
+
+    # Select necessary columns for TSV
     output_columns = [
         "chrom", "start", "end", "family", "frequency", "strand", "genotype", "passed", "query_region",
         "target_region", "total_support", "tsd_seq", "insertion_seq", "upstream_seq", "downstream_seq", "extra_info"
@@ -430,16 +436,16 @@ cpdef merge_output(genotyper='bayesian'):
         # Insert genotype_quality after genotype
         idx = output_columns.index("genotype")
         output_columns.insert(idx + 1, "genotype_quality")
-    result_df = result_df[output_columns]
 
-    # Save the result to a file
-    output_path = os.path.abspath("result.tsv")
-    result_df.to_csv(output_path, sep="\t", index=False)
+    # Save the result as TSV
+    if output_format in ('tsv', 'both'):
+        tsv_path = os.path.abspath("result.tsv")
+        result_df[output_columns].to_csv(tsv_path, sep="\t", index=False)
+        logger.info("TSV output: %s", tsv_path)
 
     # Summary logging
     num_passed = result_df['passed'].sum()
     num_failed = len(result_df) - num_passed
-    logger.info("Output file: %s", output_path)
     logger.info("Total insertions: %d (passed: %d, failed: %d)", len(result_df), num_passed, num_failed)
 
 
@@ -530,3 +536,131 @@ def generate_extra_info(row):
         f"self2self={row['self2self']},"
         f"soloLTR={row['solo_ltr']}"
     )
+
+
+def _vcf_escape(value):
+    """Escape characters reserved in VCF INFO field values."""
+    if not isinstance(value, str):
+        value = str(value) if value is not None else "."
+    return (value.replace(";", "%3B")
+                .replace("=", "%3D")
+                .replace(",", "%2C")
+                .replace("\n", " ")
+                .replace("\t", " "))
+
+
+def write_vcf(df, output_path, sample_name="SAMPLE"):
+    """
+    Write insertion results in VCF 4.3 format.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Result DataFrame with all columns from merge_output.
+    output_path : str
+        Path for the output .vcf file.
+    sample_name : str
+        Name for the single sample column.
+    """
+    has_gq = "genotype_quality" in df.columns
+    chromosomes = sorted(df["chrom"].unique())
+
+    with open(output_path, "w") as f:
+        # --- Header lines ---
+        f.write("##fileformat=VCFv4.3\n")
+        f.write("##source=LOCATE\n")
+
+        for chrom in chromosomes:
+            if pd.isna(chrom):
+                continue
+            f.write(f"##contig=<ID={chrom}>\n")
+
+        # INFO definitions
+        info_defs = {
+            "END": ("Integer", "End position of the structural variant"),
+            "SVTYPE": ("String", "Type of structural variant"),
+            "SVLEN": ("Integer", "Insertion length"),
+            "FAMILY": ("String", "TE family name(s)"),
+            "AF": ("Float", "Allele frequency"),
+            "STRAND": ("String", "Insertion strand orientation (+/-)"),
+            "TSD": ("String", "Target site duplication sequence"),
+            "TE_CLASS": ("String", "TE class (DNA/LTR/LINE/SINE/Retroposon/unknown)"),
+            "TRUNCATION": ("String", "Truncation status"),
+            "RECONSTRUCTED_ENDS": ("String", "Reconstructed ends status"),
+            "HAS_POLYA": ("Integer", "Has polyA tail"),
+            "HAS_TSD": ("Integer", "Has target site duplication"),
+            "ASSEMBLED": ("Integer", "Insertion was assembled"),
+            "SINGLETON": ("Integer", "Singleton insertion"),
+            "SELF2SELF": ("Integer", "Self-to-self insertion"),
+            "SOLO_LTR": ("Integer", "Solo LTR"),
+            "SUPPORT": ("Integer", "Total supporting reads"),
+            "LEFT_CLIP": ("Integer", "Left-clipped reads"),
+            "SPANNING": ("Integer", "Spanning/mid-insert reads"),
+            "RIGHT_CLIP": ("Integer", "Right-clipped reads"),
+            "QV": ("Float", "ML model probability"),
+        }
+        for tag, (vtype, desc) in info_defs.items():
+            f.write(f'##INFO=<ID={tag},Number=1,Type={vtype},Description="{desc}">\n')
+
+        # FORMAT definitions
+        f.write('##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n')
+        f.write('##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality">\n')
+
+        # FILTER definitions
+        f.write('##FILTER=<ID=PASS,Description="All filters passed">\n')
+        f.write('##FILTER=<ID=FAIL,Description="Failed post-filtering">\n')
+
+        # Column header
+        f.write(f"#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{sample_name}\n")
+
+        # --- Data lines ---
+        for _, row in df.iterrows():
+            chrom = str(row["chrom"]) if not pd.isna(row.get("chrom")) else "."
+            pos = int(row["start"]) + 1 if not pd.isna(row.get("start")) else 1
+            vid = _vcf_escape(str(row["insertion_id"])) if not pd.isna(row.get("insertion_id")) else "."
+            qual = str(int(row["genotype_quality"])) if has_gq and not pd.isna(row.get("genotype_quality")) else "."
+
+            # FILTER
+            passed = row.get("passed", False)
+            filt = "PASS" if passed else "FAIL"
+
+            # Build INFO
+            svlen = len(str(row.get("insertion_seq", "")) or "") if not pd.isna(row.get("insertion_seq")) else 0
+            end = int(row["end"]) if not pd.isna(row.get("end")) else pos
+
+            info_parts = [
+                f"END={end}",
+                "SVTYPE=INS",
+                f"SVLEN={svlen}",
+                f"FAMILY={_vcf_escape(row.get('family', '.'))}",
+                f"AF={float(row.get('frequency', 0))}",
+                f"STRAND={_vcf_escape(row.get('strand', '.'))}",
+                f"TSD={_vcf_escape(row.get('tsd_seq', '.'))}",
+                f"TE_CLASS={_vcf_escape(row.get('te_class', '.'))}",
+                f"TRUNCATION={_vcf_escape(row.get('truncation', '.'))}",
+                f"RECONSTRUCTED_ENDS={_vcf_escape(row.get('reconstructed_ends', '.'))}",
+                f"HAS_POLYA={1 if row.get('has_polya') else 0}",
+                f"HAS_TSD={1 if row.get('has_tsd') else 0}",
+                f"ASSEMBLED={1 if row.get('assembled') else 0}",
+                f"SINGLETON={1 if row.get('singleton') else 0}",
+                f"SELF2SELF={1 if row.get('self2self') else 0}",
+                f"SOLO_LTR={1 if row.get('solo_ltr') else 0}",
+                f"SUPPORT={int(row.get('total_support', 0))}",
+                f"LEFT_CLIP={int(row.get('leftclip_reads', 0))}",
+                f"SPANNING={int(row.get('spanning_reads', 0))}",
+                f"RIGHT_CLIP={int(row.get('rightclip_reads', 0))}",
+                f"QV={float(row.get('prob', 0))}",
+            ]
+            info = ";".join(info_parts)
+
+            # FORMAT and sample
+            genotype = row.get("genotype", "./.")
+            gt_val = str(genotype) if not pd.isna(genotype) else "./."
+            if has_gq and not pd.isna(row.get("genotype_quality")):
+                fmt = "GT:GQ"
+                sample_val = f"{gt_val}:{int(row['genotype_quality'])}"
+            else:
+                fmt = "GT"
+                sample_val = gt_val
+
+            f.write(f"{chrom}\t{pos}\t{vid}\tN\t<INS>\t{qual}\t{filt}\t{info}\t{fmt}\t{sample_val}\n")

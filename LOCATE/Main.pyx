@@ -57,6 +57,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('-G', '--genotyper', dest='genotyper', type=str,
                         default='bayesian', choices=['bayesian', 'threshold'],
                         help='Genotyping method (default: bayesian)')
+    parser.add_argument('-F', '--output-format', dest='output_format', type=str,
+                        default='both', choices=['tsv', 'vcf', 'both'],
+                        help='Output format (default: both)')
     return parser.parse_args()
 
 
