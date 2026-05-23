@@ -45,6 +45,8 @@ make && make clean
 locate --help
 ```
 
+Note: There's a small test data set inside `tests/data`.
+
 ## 2. Download annotations
 
 LOCATE compatible `annotations` and `models` can be downloaded from [here](https://users.wenglab.org/boxu/LOCATE/data.html).
