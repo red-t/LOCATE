@@ -392,7 +392,7 @@ cpdef output_reference_flank(Cluster[::1] clt_view, dict cluster_data_by_tid, tu
     extract_ref_flankseq(ref_fn, &clt_view[0], start_idx, end_idx)
 
 
-cpdef merge_output(genotyper='bayesian', output_format='tsv', sample_name='SAMPLE'):
+cpdef merge_output(genotyper='bayesian', output_format='both', sample_name='SAMPLE'):
     """
     Merge output files into a single result, with additional flag parsing.
     """
