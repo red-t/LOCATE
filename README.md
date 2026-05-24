@@ -63,8 +63,7 @@ locate -b sorted.bam -r GRCh38.rmsk.bed -g GRCh38.gap.bed \
        -G bayesian -F both -o output_path
 ```
 
-**Note:**
-- Currently, LOCATE requires alignment mapped by `minimap2 -Y` option, which uses soft clipping for supplementary alignments:
+Note: Raw reads should be aligned to reference genome by `minimap2` with `-Y` option, which uses soft clipping for supplementary alignments:
 
 ```shell
 minimap2 -aYx $PRESET $REF $QUERY | samtools view -bhS - | samtools sort -o sorted.bam -
