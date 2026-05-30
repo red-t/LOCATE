@@ -45,11 +45,48 @@ make && make clean
 locate --help
 ```
 
-Note: There's a small test data set inside `tests/data`.
+## 2. Download models and annotations
 
-## 2. Download annotations
+### 2.1 Download
 
 LOCATE compatible `annotations` and `models` can be downloaded from [here](https://users.wenglab.org/boxu/LOCATE/data.html).
+
+### 2.2 Test with minimal test dataset
+
+There's a small test dataset for `dm6` inside `tests/data`.
+
+```
+# 1. download annotations and model for dm6
+wget https://users.wenglab.org/boxu/LOCATE/data/model/Dm6.model.tar.gz
+tar -xzf Dm6.model.tar.gz
+
+# 2. download test data
+wget https://raw.githubusercontent.com/red-t/LOCATE/master/tests/data/dm6.test.bam
+wget https://raw.githubusercontent.com/red-t/LOCATE/master/tests/data/dm6.test.bam.bai
+
+# 3. test LOCATE with required parameters
+locate -b dm6.test.bam \
+       -C Dm6/Dm6.transposon.class \
+       -T Dm6/Dm6.transposon.fa \
+       -R Dm6/Dm6_no_alt.fa \
+       -H Dm6/Dm6_HighFreq \
+       -L Dm6/Dm6_LowFreq \
+       -o output
+
+# 4. test LOCATE with full parameters
+locate -b dm6.test.bam \
+       -C Dm6/Dm6.transposon.class \
+       -T Dm6/Dm6.transposon.fa \
+       -R Dm6/Dm6_no_alt.fa \
+       -H Dm6/Dm6_HighFreq \
+       -L Dm6/Dm6_LowFreq \
+       -r Dm6/Dm6.rmsk.bed \
+       -g Dm6/Dm6.gap.bed \
+       -B Dm6/Dm6.blacklist.bed \
+       -t 8 \
+       -F both \
+       -o output
+```
 
 ## 3. Quick Start
 
@@ -57,10 +94,18 @@ The most common way to call transposon insertions from long read alignments (Pac
 
 ```shell
 # For example, using GRCh38 as reference
-locate -b sorted.bam -r GRCh38.rmsk.bed -g GRCh38.gap.bed \
-       -C GRCh38.transposon.class -T GRCh38.transposon.fa \
-       -R GRCh38_no_alt.fa -H GRCh38_HighFreq -L GRCh38_LowFreq \
-       -G bayesian -F both -o output_path
+locate -b sorted.bam \
+       -C GRCh38.transposon.class \
+       -T GRCh38.transposon.fa \
+       -R GRCh38_no_alt.fa \
+       -H GRCh38_HighFreq \
+       -L GRCh38_LowFreq \
+       -r GRCh38.rmsk.bed \
+       -g GRCh38.gap.bed \
+       -B GRCh38.blacklist.bed \
+       -t 8 \
+       -F both \
+       -o output_path
 ```
 
 Note: Raw reads should be aligned to reference genome by `minimap2` with `-Y` option, which uses soft clipping for supplementary alignments:
@@ -94,20 +139,7 @@ samtools index sorted.bam
 | `-O` | `--overhang` | No | 200 | Min overhang length |
 | `-v` | `--verbose` | No | INFO | Enable debug logging |
 
-## 5. Pipeline
-
-LOCATE processes the input BAM in 8 stages:
-
-1. **Background information extraction** — computes average divergence, depth, and median read length from the BAM
-2. **LTR size definition** — splits LTR TE consensus in half for paired mapping
-3. **TE reference building** — builds a temporary indexed TE FASTA reference
-4. **Cluster building** — parses CIGAR strings, extracts segments, merges nearby breakpoints, computes features, and filters clusters using AutoGluon ML models
-5. **Local assembly** — assembles insertion sequences with wtdbg2, polishes with minimap2 + samtools consensus, and recalibrates homopolymer regions
-6. **Sequence output** — outputs assembled sequences for high-frequency and pseudo-assemblies for low-frequency clusters
-7. **Annotation** — maps assembled sequences to TE consensus library, annotates TE fragments, polyA/T tails, TSDs, and computes insertion frequency
-8. **Output merging & genotyping** — merges all data and determines genotypes using a Beta-Binomial Bayesian model (or threshold-based method)
-
-## 6. Output
+## 5. Output
 
 By default, LOCATE produces both a tab-delimited file (`result.tsv`) and a VCF 4.3 file (`result.vcf`) in the output directory. Use the `-F` flag to select a single format.
 
@@ -121,7 +153,7 @@ By default, LOCATE produces both a tab-delimited file (`result.tsv`) and a VCF 4
 | 4 | family | Transposon family of the insertion, separated by "," |
 | 5 | frequency | Insertion allele frequency |
 | 6 | strand | Orientation of the inserted transposon fragment |
-| 7 | genotype | Genotype determined by the frequency (0/0, 0/1, 1/1) |
+| 7 | genotype | Genotype determined by bayesian/frequency-threshold (0/0, 0/1, 1/1) |
 | 8 | genotype_quality | genotype quality |
 | 9 | passed | Whether this insertion passes the post-filtering (True/False) |
 | 10 | query_region | Annotated regions on the insertion sequence, format: "{+/-}:{start}-{end}" |
